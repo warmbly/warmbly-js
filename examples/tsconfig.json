@@ -1,0 +1,16 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "..",
+    "baseUrl": ".",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "types": ["node"],
+    "paths": {
+      "warmbly": ["../src/index.ts"]
+    }
+  },
+  "include": ["*.ts"],
+  "exclude": ["integrations", "runtimes"]
+}

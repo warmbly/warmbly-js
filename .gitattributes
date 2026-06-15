@@ -1,0 +1,15 @@
+# Normalize line endings to LF on checkin
+* text=auto eol=lf
+
+# Binary assets
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+
+# Keep generated/lock files out of language stats and diffs
+pnpm-lock.yaml linguist-generated=true -diff
+CHANGELOG.md linguist-generated=true
