@@ -167,7 +167,12 @@ export class Gateway {
    * gateway is ready. Subsequent reconnects are handled internally.
    */
   async connect(): Promise<void> {
-    if (this._state === "ready" || this._state === "connecting" || this._state === "identifying") {
+    if (
+      this._state === "ready" ||
+      this._state === "connecting" ||
+      this._state === "identifying" ||
+      this._state === "reconnecting"
+    ) {
       return;
     }
     this.deliberatelyClosed = false;
@@ -403,6 +408,11 @@ export class Gateway {
   private handlePhxError(frame: PhoenixFrame): void {
     const reason = typeof frame.payload.reason === "string" ? frame.payload.reason : undefined;
     this.emitter.emit("error", new GatewayError(reason ?? "Channel error.", { reason }));
+    // A channel crashed while the socket stayed open. Rejoin the org channel so events keep
+    // flowing; the rejoin carries the resume marker and yields a fresh HELLO.
+    if (this.orgId && frame.topic === ChannelTopic.org(this.orgId)) {
+      this.sendOrgJoin();
+    }
   }
 
   /** Applies a `resumed` marker: advance seq and emit the lifecycle event. */
