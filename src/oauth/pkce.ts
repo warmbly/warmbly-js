@@ -1,8 +1,5 @@
 import { WarmblyError } from "../core/errors";
 
-/** Characters allowed in a PKCE code verifier, per RFC 7636 (the base64url alphabet). */
-const VERIFIER_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
-
 /** Resolves the Web Crypto object, present in Node 18+, Bun, Deno, browsers, and the edge. */
 function getCrypto() {
   const c = globalThis.crypto;
@@ -50,13 +47,10 @@ export function generateCodeVerifier(length = 64): string {
     throw new WarmblyError("PKCE code verifier length must be between 43 and 128 characters.");
   }
   const crypto = getCrypto();
-  const randomBytes = new Uint8Array(length);
+  // base64url over random bytes yields a uniform, unreserved-charset verifier with no modulo bias.
+  const randomBytes = new Uint8Array(Math.ceil((length * 3) / 4));
   crypto.getRandomValues(randomBytes);
-  let verifier = "";
-  for (let i = 0; i < length; i += 1) {
-    verifier += VERIFIER_ALPHABET[(randomBytes[i] as number) % VERIFIER_ALPHABET.length];
-  }
-  return verifier;
+  return base64UrlEncode(randomBytes).slice(0, length);
 }
 
 /**
