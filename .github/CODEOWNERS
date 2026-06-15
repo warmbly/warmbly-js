@@ -1,0 +1,6 @@
+# Default owners for everything in this repository.
+* @warmbly/sdk
+
+# Release and CI configuration.
+/.github/ @warmbly/sdk
+/.changeset/ @warmbly/sdk
