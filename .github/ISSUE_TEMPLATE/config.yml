@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Warmbly API documentation
+    url: https://docs.warmbly.com
+    about: Reference docs for the Warmbly API, OAuth, and the realtime gateway.
+  - name: Report a security vulnerability
+    url: https://github.com/warmbly/warmbly-js/security/advisories/new
+    about: Please report security issues privately, not as public issues.

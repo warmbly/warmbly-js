@@ -1,0 +1,53 @@
+name: Bug report
+description: Report a problem with the warmbly SDK
+labels: [bug, triage]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for taking the time to file a bug. Please redact any API keys or tokens before posting.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug, including what you expected to happen instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Minimal code that reproduces the issue.
+      render: typescript
+    validations:
+      required: true
+  - type: input
+    id: sdk-version
+    attributes:
+      label: SDK version
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: runtime
+    attributes:
+      label: Runtime
+      options:
+        - Node.js
+        - Bun
+        - Deno
+        - Browser
+        - Edge or Workers
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: runtime-version
+    attributes:
+      label: Runtime version
+      placeholder: "Node 20.11.0"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or error output
+      description: Include the error message and, if available, the request id from the error.
+      render: shell
