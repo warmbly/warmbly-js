@@ -25,5 +25,5 @@
     "moduleDetection": "force"
   },
   "include": ["src"],
-  "exclude": ["dist", "node_modules", "examples"]
+  "exclude": ["dist", "node_modules", "examples", "**/*.test.ts"]
 }
