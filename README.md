@@ -46,13 +46,13 @@ import { Warmbly } from "warmbly";
 const warmbly = new Warmbly({ apiKey: process.env.WARMBLY_API_KEY });
 
 // List campaigns (auto-paginated)
-for await (const campaign of warmbly.campaigns.list()) {
+for await (const campaign of await warmbly.campaigns.list()) {
   console.log(campaign.id, campaign.name);
 }
 
 // Create a contact
 const created = await warmbly.contacts.add([
-  { email: "jane@example.com", first_name: "Jane", company: "Acme" },
+  { email: "jordan@warmbly.com", first_name: "Jane", company: "Warmbly" },
 ]);
 ```
 
@@ -102,7 +102,7 @@ List methods return a `Page`. Iterate it to walk every record across pages, or p
 
 ```ts
 // Iterate everything
-for await (const key of warmbly.apiKeys.list()) {
+for await (const key of await warmbly.apiKeys.list()) {
   console.log(key.name, key.status);
 }
 
@@ -154,7 +154,7 @@ try {
 By default the client retries transient failures (429 and 5xx and network errors) with exponential backoff plus jitter, honoring `Retry-After`. Mutations get an automatic `Idempotency-Key` so a retry never double-executes. You can override per request:
 
 ```ts
-await warmbly.contacts.add([{ email: "x@example.com" }], {
+await warmbly.contacts.add([{ email: "team@warmbly.com" }], {
   idempotencyKey: "import-2026-06-15",
   maxRetries: 5,
   timeout: 10_000,
