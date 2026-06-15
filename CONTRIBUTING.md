@@ -7,7 +7,7 @@ By participating, you agree to abide by our [Code of Conduct](./CODE_OF_CONDUCT.
 
 ## Prerequisites
 
-- [Node.js](https://nodejs.org) 18 or newer (the repo pins a version in `.nvmrc`)
+- [Node.js](https://nodejs.org) 20 or newer (the repo pins a version in `.nvmrc`)
 - [pnpm](https://pnpm.io) 10 or newer (`corepack enable` will provide it)
 
 The SDK itself ships with zero runtime dependencies and targets Node, Bun, Deno, browsers, and

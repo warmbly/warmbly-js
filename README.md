@@ -18,7 +18,7 @@ A typed REST client, an OAuth2 helper, and a realtime gateway in one zero-depend
 ## Highlights
 
 - **Three pillars, one import.** REST resources, the OAuth2 authorization-code flow, and a realtime gateway, all from `warmbly`.
-- **Runs everywhere.** Node 18+, Bun, Deno, browsers, and edge runtimes. Built on web standards (`fetch`, `WebSocket`, Web Crypto), with `fetch` and `WebSocket` injectable.
+- **Runs everywhere.** Node 20+, Bun, Deno, browsers, and edge runtimes. Built on web standards (`fetch`, `WebSocket`, Web Crypto), with `fetch` and `WebSocket` injectable.
 - **Zero runtime dependencies.** Nothing to audit, nothing to bloat your bundle. Tree-shakeable, dual ESM and CommonJS, with full type declarations.
 - **Typed end to end.** Every resource, event, error, and option is typed. Gateway events are a typed map, so `gw.on("EMAIL_OPENED", ...)` knows the payload.
 - **Resilient by default.** Automatic retries with backoff and jitter, `Retry-After` support, idempotency keys for safe mutation retries, timeouts, and a self-healing gateway that reconnects and resumes.
@@ -315,11 +315,11 @@ const warmbly = new Warmbly({
 
 ## Runtimes
 
-The package ships ESM and CommonJS with type declarations for both, validated in CI with [publint](https://publint.dev) and [Are the types wrong](https://arethetypeswrong.github.io). It is tested on Node 18, 20, and 22, with cross-runtime smoke tests on Bun and Deno.
+The package ships ESM and CommonJS with type declarations for both, validated in CI with [publint](https://publint.dev) and [Are the types wrong](https://arethetypeswrong.github.io). It is tested on Node 20, 22, and 24, with cross-runtime smoke tests on Bun and Deno.
 
 | Runtime | Supported |
 | --- | --- |
-| Node.js 18+ | yes (global `fetch`; `ws` peer for the gateway on Node < 22) |
+| Node.js 20+ | yes (global `fetch`; `ws` peer for the gateway on Node < 22) |
 | Bun | yes |
 | Deno | yes |
 | Browsers | yes |
