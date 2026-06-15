@@ -7,13 +7,13 @@ import { NotFoundError, RateLimitError, Warmbly, WarmblyAPIError } from "warmbly
 const warmbly = new Warmbly({ apiKey: process.env.WARMBLY_API_KEY });
 
 // Auto-paginate: the loop fetches each page on demand.
-for await (const campaign of warmbly.campaigns.list({ limit: 50 })) {
+for await (const campaign of await warmbly.campaigns.list({ limit: 50 })) {
   console.log(campaign.id, campaign.name, campaign.status);
 }
 
 // Create a contact with an idempotency key so retries are safe.
 const added = await warmbly.contacts.add(
-  [{ email: "jane@example.com", first_name: "Jane", company: "Acme" }],
+  [{ email: "jordan@warmbly.com", first_name: "Jane", company: "Warmbly" }],
   { idempotencyKey: "seed-jane" },
 );
 console.log("added", added);
