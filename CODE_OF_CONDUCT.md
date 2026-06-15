@@ -30,7 +30,7 @@ project, such as posting from an official account or speaking as a maintainer.
 ## Reporting
 
 If you see or experience behavior that breaks these expectations, please email
-<conduct@warmbly.com>. Reports are read by the maintainers and kept confidential. Include what
+<team@warmbly.com>. Reports are read by the maintainers and kept confidential. Include what
 happened, where, and any links or context that help us understand the situation.
 
 We will review every report, respond as promptly as we reasonably can, and decide on a fair response.

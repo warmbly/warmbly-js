@@ -16,7 +16,7 @@ Please report security issues privately. Do not open a public issue.
 
 - Preferred: open a private advisory at
   <https://github.com/warmbly/warmbly-js/security/advisories/new>.
-- Or email <security@warmbly.com> with the details and a reproduction.
+- Or email <team@warmbly.com> with the details and a reproduction.
 
 We aim to acknowledge reports within three business days and to ship a fix or mitigation as quickly
 as the severity warrants. We are happy to credit reporters in the release notes unless you prefer to
