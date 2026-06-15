@@ -1,0 +1,97 @@
+{
+  "name": "warmbly",
+  "version": "0.1.0",
+  "description": "The official Warmbly SDK for JavaScript and TypeScript: REST API client, OAuth2 helper, and realtime gateway. Runs on Node, Bun, Deno, browsers, and the edge.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Warmbly",
+  "homepage": "https://github.com/warmbly/warmbly-js#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/warmbly/warmbly-js.git"
+  },
+  "bugs": {
+    "url": "https://github.com/warmbly/warmbly-js/issues"
+  },
+  "keywords": [
+    "warmbly",
+    "sdk",
+    "api",
+    "client",
+    "oauth2",
+    "oauth",
+    "websocket",
+    "realtime",
+    "typescript",
+    "email",
+    "outreach",
+    "deliverability"
+  ],
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "check:exports": "attw --pack .",
+    "check:publish": "publint",
+    "prepublishOnly": "pnpm run build",
+    "release": "changeset publish",
+    "version-packages": "changeset version"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "packageManager": "pnpm@10.34.1",
+  "peerDependencies": {
+    "ws": "^8.0.0"
+  },
+  "peerDependenciesMeta": {
+    "ws": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.2",
+    "@biomejs/biome": "^2.2.0",
+    "@changesets/cli": "^2.29.0",
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.5.13",
+    "@vitest/coverage-v8": "^3.0.0",
+    "publint": "^0.3.0",
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.0.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}
