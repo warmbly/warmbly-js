@@ -25,5 +25,11 @@ jobs:
         uses: github/codeql-action/init@v3
         with:
           languages: javascript-typescript
+          # Scan only the shipped library source. Tests and examples are illustrative and not published.
+          config: |
+            paths:
+              - src
+            paths-ignore:
+              - "**/*.test.ts"
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@v3
