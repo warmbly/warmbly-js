@@ -562,7 +562,9 @@ export class Gateway {
   }
 }
 
-/** Removes any trailing slashes from a URL. */
+/** Removes any trailing slashes from a URL without a backtracking regex. */
 function stripTrailingSlash(url: string): string {
-  return url.replace(/\/+$/, "");
+  let end = url.length;
+  while (end > 0 && url.charCodeAt(end - 1) === 47) end -= 1;
+  return url.slice(0, end);
 }
