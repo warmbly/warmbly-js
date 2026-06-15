@@ -74,8 +74,7 @@ export class WarmblyAPIError extends WarmblyError {
     requestId?: string,
   ): WarmblyAPIError {
     const parsed = (body && typeof body === "object" ? body : {}) as ApiErrorBody;
-    const message =
-      parsed.message || parsed.error || `Warmbly API error (HTTP ${status})`;
+    const message = parsed.message || parsed.error || `Warmbly API error (HTTP ${status})`;
     const rid = requestId ?? parsed.request_id;
     const options: WarmblyAPIErrorOptions = {
       status,
