@@ -125,13 +125,16 @@ export class Warmbly {
       }
       return token;
     };
-    const usesInheritedToken = options.token === undefined && options.getToken === undefined;
-    return new Gateway({
-      url: this.options.gatewayUrl,
-      orgId: options.orgId ?? this.options.organizationId,
-      ...(usesInheritedToken ? { getToken: inheritedToken } : {}),
-      ...options,
-    });
+    // Spread the caller's options first, then apply inherited defaults with `??` so an
+    // explicitly-undefined token/getToken/url/orgId never clobbers the client's values.
+    const merged: GatewayOptions = { ...options };
+    merged.url = options.url ?? this.options.gatewayUrl;
+    const orgId = options.orgId ?? this.options.organizationId;
+    if (orgId !== undefined) merged.orgId = orgId;
+    if (options.token === undefined && options.getToken === undefined) {
+      merged.getToken = inheritedToken;
+    }
+    return new Gateway(merged);
   }
 
   /**
