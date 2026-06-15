@@ -67,6 +67,12 @@ export class HttpClient {
     let attempt = 0;
     // Retry loop. Each pass re-resolves the token so rotating credentials are picked up.
     for (;;) {
+      // A signal already aborted before dispatch never fires its "abort" event, so check up front.
+      if (opts.signal?.aborted) {
+        throw new WarmblyConnectionError("Request was aborted by the caller.", {
+          cause: opts.signal.reason,
+        });
+      }
       const headers = await this.buildHeaders(opts, idempotencyKey, contentType);
 
       let timedOut = false;
