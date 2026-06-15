@@ -28,7 +28,10 @@ const RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504]);
 const MAX_OAUTH_RETRIES = 2;
 
 function stripTrailingSlash(url: string): string {
-  return url.replace(/\/+$/, "");
+  // Index math instead of /\/+$/ to avoid a polynomial-ReDoS pattern on long input.
+  let end = url.length;
+  while (end > 0 && url.charCodeAt(end - 1) === 47) end -= 1;
+  return url.slice(0, end);
 }
 
 /** Derives the discovery URL (`<origin>/.well-known/oauth-authorization-server`) from a base URL. */

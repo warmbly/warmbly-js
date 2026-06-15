@@ -32,7 +32,10 @@ function base64UrlEncode(bytes: Uint8Array): string {
     }
     base64 = nodeBuffer.from(binary, "binary").toString("base64");
   }
-  return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  // Strip base64 "=" padding with index math; a /=+$/ regex is a polynomial-ReDoS pattern.
+  let end = base64.length;
+  while (end > 0 && base64.charCodeAt(end - 1) === 61) end -= 1;
+  return base64.slice(0, end).replace(/\+/g, "-").replace(/\//g, "_");
 }
 
 /**
