@@ -40,7 +40,7 @@ export class Templates extends APIResource {
   /**
    * Lists templates, auto-paginating when iterated.
    * @example
-   * for await (const t of warmbly.templates.list()) console.log(t.name);
+   * for await (const t of await warmbly.templates.list()) console.log(t.name);
    */
   list(params?: ListTemplatesParams): Promise<Page<Template>> {
     return this.http.getPage<Template>("templates", { query: params });

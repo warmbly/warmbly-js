@@ -175,7 +175,7 @@ export class Misc extends APIResource {
   /**
    * Lists audit log entries, auto-paginating when iterated.
    * @example
-   * for await (const entry of warmbly.misc.auditLogs()) console.log(entry.action);
+   * for await (const entry of await warmbly.misc.auditLogs()) console.log(entry.action);
    */
   auditLogs(params?: Record<string, unknown>): Promise<Page<AuditLogEntry>> {
     return this.http.getPage<AuditLogEntry>("audit-logs", { query: params });

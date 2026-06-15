@@ -148,7 +148,7 @@ export class ApiKeys extends APIResource {
    * Lists API keys for the organization, auto-paginating when iterated.
    *
    * @example
-   * for await (const key of warmbly.apiKeys.list()) console.log(key.name);
+   * for await (const key of await warmbly.apiKeys.list()) console.log(key.name);
    */
   list(params?: ListApiKeysParams): Promise<Page<ApiKey>> {
     return this.http.getPage<ApiKey>("api-keys", { query: params });
@@ -242,7 +242,7 @@ export class ApiKeys extends APIResource {
    * Lists the request logs for a key, auto-paginating when iterated (limit up to 200).
    *
    * @example
-   * for await (const line of warmbly.apiKeys.logs("key_123")) console.log(line);
+   * for await (const line of await warmbly.apiKeys.logs("key_123")) console.log(line);
    */
   logs(id: string, params?: ApiKeyLogsParams): Promise<Page<ApiKeyLog>> {
     return this.http.getPage<ApiKeyLog>(this.path("api-keys", id, "logs"), { query: params });

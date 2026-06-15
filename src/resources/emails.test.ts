@@ -44,9 +44,9 @@ describe("Emails", () => {
 
   it("sends a one-off email", async () => {
     const { http, fetchMock } = clientWith({ message_id: "m1" });
-    await new Emails(http).send("mb1", { to: "x@example.com", subject: "Hi" });
+    await new Emails(http).send("mb1", { to: "team@warmbly.com", subject: "Hi" });
     const { url, init } = lastCall(fetchMock);
     expect(url).toContain("/emails/mb1/send");
-    expect(JSON.parse(String(init.body))).toEqual({ to: "x@example.com", subject: "Hi" });
+    expect(JSON.parse(String(init.body))).toEqual({ to: "team@warmbly.com", subject: "Hi" });
   });
 });

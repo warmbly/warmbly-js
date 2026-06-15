@@ -32,7 +32,7 @@ export type WarmupAction = "start" | "pause" | "resume" | "stop" | "appeal";
  * Reachable as `warmbly.emails`.
  *
  * @example
- * for await (const mb of warmbly.emails.list()) console.log(mb.email);
+ * for await (const mb of await warmbly.emails.list()) console.log(mb.email);
  * await warmbly.emails.warmup("mb_1", "start");
  */
 export class Emails extends APIResource {
@@ -84,7 +84,7 @@ export class Emails extends APIResource {
   /**
    * Verifies one or more mailbox addresses.
    * @example
-   * const result = await warmbly.emails.verify({ emails: ["a@example.com"] });
+   * const result = await warmbly.emails.verify({ emails: ["team@warmbly.com"] });
    */
   verify(params: Record<string, unknown>): Promise<Record<string, unknown>> {
     return this.http.post<Record<string, unknown>>("emails/verify", { body: params });
@@ -129,7 +129,7 @@ export class Emails extends APIResource {
   /**
    * Sends a one-off email from a mailbox.
    * @example
-   * await warmbly.emails.send("mb_1", { to: "x@example.com", subject: "Hi", body: "..." });
+   * await warmbly.emails.send("mb_1", { to: "team@warmbly.com", subject: "Hi", body: "..." });
    */
   send(id: string, params: Record<string, unknown>): Promise<Record<string, unknown>> {
     return this.http.post<Record<string, unknown>>(this.path("emails", id, "send"), {

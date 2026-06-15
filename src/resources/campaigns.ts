@@ -71,7 +71,7 @@ export class Campaigns extends APIResource {
   /**
    * Lists campaigns, auto-paginating when iterated.
    * @example
-   * for await (const c of warmbly.campaigns.list()) console.log(c.name);
+   * for await (const c of await warmbly.campaigns.list()) console.log(c.name);
    */
   list(params?: ListCampaignsParams): Promise<Page<Campaign>> {
     return this.http.getPage<Campaign>("campaigns", { query: params });
@@ -154,7 +154,7 @@ export class Campaigns extends APIResource {
   /**
    * Lists a campaign's logs, auto-paginating when iterated.
    * @example
-   * for await (const log of warmbly.campaigns.logs("camp_1")) console.log(log);
+   * for await (const log of await warmbly.campaigns.logs("camp_1")) console.log(log);
    */
   logs(id: string, params?: Record<string, unknown>): Promise<Page<CampaignLog>> {
     return this.http.getPage<CampaignLog>(this.path("campaigns", id, "logs"), { query: params });
@@ -163,7 +163,7 @@ export class Campaigns extends APIResource {
   /**
    * Sends a test email for a campaign.
    * @example
-   * await warmbly.campaigns.testEmail("camp_1", { to: "me@example.com" });
+   * await warmbly.campaigns.testEmail("camp_1", { to: "dev@warmbly.com" });
    */
   testEmail(id: string, params: Record<string, unknown>): Promise<Record<string, unknown>> {
     return this.http.post<Record<string, unknown>>(this.path("campaigns", id, "test-email"), {

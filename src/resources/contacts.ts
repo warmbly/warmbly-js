@@ -67,7 +67,7 @@ export class Contacts extends APIResource {
   /**
    * Alias for {@link search}; `POST /contacts/search` is the list endpoint for contacts.
    * @example
-   * for await (const c of warmbly.contacts.list()) console.log(c.id);
+   * for await (const c of await warmbly.contacts.list()) console.log(c.id);
    */
   list(params?: ContactSearchParams): Promise<Page<Contact>> {
     return this.searchPage(params);
@@ -85,7 +85,7 @@ export class Contacts extends APIResource {
   /**
    * Adds contacts in a batch.
    * @example
-   * await warmbly.contacts.add([{ email: "a@example.com" }]);
+   * await warmbly.contacts.add([{ email: "team@warmbly.com" }]);
    */
   add(contacts: AddContactParams[], opts?: RequestOptions): Promise<Record<string, unknown>> {
     return this.http.post<Record<string, unknown>>("contacts", {
@@ -97,7 +97,7 @@ export class Contacts extends APIResource {
   /**
    * Bulk-updates contacts.
    * @example
-   * await warmbly.contacts.bulkUpdate({ filter: {}, set: { company: "Acme" } });
+   * await warmbly.contacts.bulkUpdate({ filter: {}, set: { company: "Warmbly" } });
    */
   bulkUpdate(params: Record<string, unknown>): Promise<Record<string, unknown>> {
     return this.http.patch<Record<string, unknown>>("contacts", { body: params });
@@ -142,7 +142,7 @@ export class Contacts extends APIResource {
   /**
    * Looks up a contact by an identifier such as email (via the `lookup` query).
    * @example
-   * const c = await warmbly.contacts.lookup({ email: "a@example.com" });
+   * const c = await warmbly.contacts.lookup({ email: "team@warmbly.com" });
    */
   lookup(params: Record<string, unknown>): Promise<Contact> {
     return this.http.get<Contact>("contacts/lookup", { query: params });
@@ -160,7 +160,7 @@ export class Contacts extends APIResource {
   /**
    * Updates a single contact.
    * @example
-   * await warmbly.contacts.update("c_1", { company: "Acme" });
+   * await warmbly.contacts.update("c_1", { company: "Warmbly" });
    */
   update(id: string, params: Record<string, unknown>): Promise<Contact> {
     return this.http.patch<Contact>(this.path("contacts", id), { body: params });

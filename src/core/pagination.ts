@@ -9,7 +9,7 @@ export type PageFetcher<T> = (cursor: string) => Promise<Page<T>>;
  *
  * @example
  * // Iterate every contact, fetching pages on demand.
- * for await (const contact of warmbly.contacts.list()) {
+ * for await (const contact of await warmbly.contacts.list()) {
  *   console.log(contact.email);
  * }
  *

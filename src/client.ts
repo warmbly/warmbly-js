@@ -36,7 +36,7 @@ import {
  * const warmbly = new Warmbly({ apiKey: process.env.WARMBLY_API_KEY });
  *
  * // REST with auto-pagination
- * for await (const contact of warmbly.contacts.list()) {
+ * for await (const contact of await warmbly.contacts.list()) {
  *   console.log(contact.email);
  * }
  *

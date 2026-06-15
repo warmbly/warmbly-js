@@ -40,13 +40,13 @@ describe("Contacts", () => {
     const { http, fetchMock } = clientWithSequence([
       {
         body: {
-          data: [{ id: "c1", email: "a@x.com" }],
+          data: [{ id: "c1", email: "team@warmbly.com" }],
           pagination: { total: 2, next_cursor: "cur2", has_more: true },
         },
       },
       {
         body: {
-          data: [{ id: "c2", email: "b@x.com" }],
+          data: [{ id: "c2", email: "casey@warmbly.com" }],
           pagination: { total: 2, next_cursor: null, has_more: false },
         },
       },
@@ -69,10 +69,10 @@ describe("Contacts", () => {
 
   it("wraps add() payload in a contacts array", async () => {
     const { http, fetchMock } = clientWithSequence([{ body: { created: 1 } }]);
-    await new Contacts(http).add([{ email: "a@x.com" }]);
+    await new Contacts(http).add([{ email: "team@warmbly.com" }]);
     const { url, init } = callAt(fetchMock, 0);
     expect(url).toContain("/contacts");
-    expect(JSON.parse(String(init.body))).toEqual({ contacts: [{ email: "a@x.com" }] });
+    expect(JSON.parse(String(init.body))).toEqual({ contacts: [{ email: "team@warmbly.com" }] });
   });
 
   it("deletes a note via the nested path", async () => {

@@ -40,7 +40,7 @@ export class Unibox extends APIResource {
   /**
    * Lists unibox conversations, auto-paginating when iterated.
    * @example
-   * for await (const item of warmbly.unibox.list()) console.log(item.subject);
+   * for await (const item of await warmbly.unibox.list()) console.log(item.subject);
    */
   list(params?: ListUniboxParams): Promise<Page<UniboxItem>> {
     return this.http.getPage<UniboxItem>("unibox", { query: params });

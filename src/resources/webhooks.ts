@@ -113,7 +113,7 @@ export class Webhooks extends APIResource {
   /**
    * Lists delivery attempts across all endpoints, auto-paginating when iterated.
    * @example
-   * for await (const d of warmbly.webhooks.deliveries({ status: "failed" })) console.log(d.id);
+   * for await (const d of await warmbly.webhooks.deliveries({ status: "failed" })) console.log(d.id);
    */
   deliveries(params?: ListDeliveriesParams): Promise<Page<WebhookEventDelivery>> {
     return this.http.getPage<WebhookEventDelivery>("webhooks/deliveries", { query: params });
@@ -179,7 +179,7 @@ export class Webhooks extends APIResource {
   /**
    * Lists delivery attempts for a single endpoint, auto-paginating when iterated.
    * @example
-   * for await (const d of warmbly.webhooks.endpointDeliveries("ep_1")) console.log(d.status);
+   * for await (const d of await warmbly.webhooks.endpointDeliveries("ep_1")) console.log(d.status);
    */
   endpointDeliveries(
     id: string,
