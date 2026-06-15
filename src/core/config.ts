@@ -9,7 +9,10 @@ import { resolveFetch } from "./fetch";
 import type { ClientOptions, ResolvedClientOptions } from "./types";
 
 function stripTrailingSlash(url: string): string {
-  return url.replace(/\/+$/, "");
+  // Index math instead of /\/+$/ to avoid a polynomial-ReDoS pattern on long input.
+  let end = url.length;
+  while (end > 0 && url.charCodeAt(end - 1) === 47) end -= 1;
+  return url.slice(0, end);
 }
 
 /**

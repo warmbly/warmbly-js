@@ -17,7 +17,12 @@ export function resolveFetch(injected?: FetchLike): FetchLike {
 /** Joins a base URL and a path, leaving absolute URLs untouched. */
 export function joinUrl(base: string, path: string): string {
   if (/^https?:\/\//i.test(path)) return path;
-  return `${base.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
+  // Trim slashes with index math; a /\/+$/-style regex is a polynomial-ReDoS risk on long input.
+  let end = base.length;
+  while (end > 0 && base.charCodeAt(end - 1) === 47) end -= 1;
+  let start = 0;
+  while (start < path.length && path.charCodeAt(start) === 47) start += 1;
+  return `${base.slice(0, end)}/${path.slice(start)}`;
 }
 
 /** Serializes a query object into a `?a=1&b=2` string, repeating array values and skipping nullish ones. */
