@@ -88,7 +88,7 @@
     "@vitest/coverage-v8": "^3.0.0",
     "publint": "^0.3.0",
     "tsup": "^8.5.0",
-    "typescript": "^5.9.0",
+    "typescript": "^6.0.3",
     "vitest": "^3.0.0"
   },
   "publishConfig": {
