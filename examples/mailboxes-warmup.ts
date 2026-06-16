@@ -49,9 +49,10 @@ if (!first) {
 
   // 7. Send a one-off message from the mailbox.
   await warmbly.emails.send(mailboxId, {
-    to: "taylor@warmbly.com",
+    to: ["taylor@warmbly.com"],
     subject: "Quick hello",
-    body: "Hi there, reaching out from our team.",
+    body_html: "<p>Hi there, reaching out from our team.</p>",
+    body_plain: "Hi there, reaching out from our team.",
   });
   console.log("message sent");
 }
