@@ -7,12 +7,12 @@ import { Warmbly } from "warmbly";
 
 const warmbly = new Warmbly({ apiKey: process.env.WARMBLY_API_KEY });
 
-// List templates. The list method returns a Page you can iterate; here we
-// collect the first page into an array.
-const firstPage = await warmbly.templates.list({ limit: 20 });
+// List templates. This endpoint is not paginated; it returns the full set as
+// an array. Pass `q` to search by name, subject, or body.
+const templates = await warmbly.templates.list();
 console.log(
   "existing templates",
-  firstPage.data.map((t) => t.name),
+  templates.map((t) => t.name),
 );
 
 // Create a new template. Subject and body may contain {{variables}} that get
