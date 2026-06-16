@@ -1,4 +1,3 @@
-import type { Page } from "../core/pagination";
 import type { RequestOptions } from "../core/types";
 import { APIResource } from "./base";
 
@@ -23,8 +22,8 @@ export interface CreateTemplateParams {
 
 /** Query params for listing templates. */
 export interface ListTemplatesParams {
-  cursor?: string;
-  limit?: number;
+  /** Full-text search across template name, subject, and body. */
+  q?: string;
   [key: string]: unknown;
 }
 
@@ -38,12 +37,15 @@ export interface ListTemplatesParams {
  */
 export class Templates extends APIResource {
   /**
-   * Lists templates, auto-paginating when iterated.
+   * Lists templates. This endpoint is not paginated; it returns the full set, optionally
+   * narrowed by the `q` search query.
    * @example
-   * for await (const t of await warmbly.templates.list()) console.log(t.name);
+   * for (const t of await warmbly.templates.list()) console.log(t.name);
    */
-  list(params?: ListTemplatesParams): Promise<Page<Template>> {
-    return this.http.getPage<Template>("templates", { query: params });
+  list(params?: ListTemplatesParams): Promise<Template[]> {
+    return this.http
+      .get<{ data: Template[] }>("templates", { query: params })
+      .then((r) => r.data ?? []);
   }
 
   /**
