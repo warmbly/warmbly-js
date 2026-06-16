@@ -13,6 +13,22 @@ export interface AnalyticsParams {
   [key: string]: unknown;
 }
 
+/** Analytics query params for endpoints where the platform requires an explicit window. */
+export interface RangeAnalyticsParams {
+  /** Inclusive start of the window (RFC 3339 or `YYYY-MM-DD`). Required. */
+  from: string;
+  /** Inclusive end of the window (RFC 3339 or `YYYY-MM-DD`). Required. */
+  to: string;
+  interval?: string;
+  [key: string]: unknown;
+}
+
+/** Query params for {@link Analytics.compareCampaigns}; all three fields are required. */
+export interface CompareCampaignsParams extends RangeAnalyticsParams {
+  /** The campaign ids to compare (an array or a comma-separated string). */
+  ids: string | string[];
+}
+
 /**
  * Read-only analytics: dashboards, deliverability, warmup, usage, per-account, and
  * per-campaign reports. Reachable as `warmbly.analytics`.
@@ -40,11 +56,11 @@ export class Analytics extends APIResource {
   }
 
   /**
-   * Returns warmup analytics.
+   * Returns warmup analytics for an explicit date window. `from` and `to` are required.
    * @example
-   * const report = await warmbly.analytics.warmup();
+   * const report = await warmbly.analytics.warmup({ from: "2026-06-01", to: "2026-06-15" });
    */
-  warmup(params?: AnalyticsParams): Promise<AnalyticsReport> {
+  warmup(params: RangeAnalyticsParams): Promise<AnalyticsReport> {
     return this.http.get<AnalyticsReport>("analytics/warmup", { query: params });
   }
 
@@ -78,12 +94,19 @@ export class Analytics extends APIResource {
   }
 
   /**
-   * Compares analytics across multiple campaigns (via query, e.g. `ids`).
+   * Compares analytics across multiple campaigns. `ids`, `from`, and `to` are required.
+   * An array of ids is sent as a single comma-separated `ids` query parameter.
    * @example
-   * const report = await warmbly.analytics.compareCampaigns({ ids: ["c_1", "c_2"] });
+   * const report = await warmbly.analytics.compareCampaigns({
+   *   ids: ["c_1", "c_2"],
+   *   from: "2026-06-01",
+   *   to: "2026-06-15",
+   * });
    */
-  compareCampaigns(params?: AnalyticsParams): Promise<AnalyticsReport> {
-    return this.http.get<AnalyticsReport>("analytics/campaigns/compare", { query: params });
+  compareCampaigns(params: CompareCampaignsParams): Promise<AnalyticsReport> {
+    const { ids, ...rest } = params;
+    const query = { ...rest, ids: Array.isArray(ids) ? ids.join(",") : ids };
+    return this.http.get<AnalyticsReport>("analytics/campaigns/compare", { query });
   }
 
   /**
@@ -98,11 +121,14 @@ export class Analytics extends APIResource {
   }
 
   /**
-   * Returns daily-bucketed analytics for a campaign.
+   * Returns daily-bucketed analytics for a campaign. `from` and `to` are required.
    * @example
-   * const report = await warmbly.analytics.campaignDaily("c_1");
+   * const report = await warmbly.analytics.campaignDaily("c_1", {
+   *   from: "2026-06-01",
+   *   to: "2026-06-15",
+   * });
    */
-  campaignDaily(id: string, params?: AnalyticsParams): Promise<AnalyticsReport> {
+  campaignDaily(id: string, params: RangeAnalyticsParams): Promise<AnalyticsReport> {
     return this.http.get<AnalyticsReport>(this.path("analytics", "campaigns", id, "daily"), {
       query: params,
     });
