@@ -120,7 +120,6 @@ export interface ListApiKeysParams {
   cursor?: string;
   /** Page size (1..100, default 50). */
   limit?: number;
-  status?: ApiKeyStatus;
   [key: string]: unknown;
 }
 
@@ -196,12 +195,13 @@ export class ApiKeys extends APIResource {
 
   /**
    * Revokes an API key, optionally recording a reason (sent as the `reason` query param).
+   * Returns an acknowledgement (`{ status: "revoked" }`), not the key record.
    *
    * @example
-   * await warmbly.apiKeys.revoke("key_123", "leaked in a public repo");
+   * const { status } = await warmbly.apiKeys.revoke("key_123", "leaked in a public repo");
    */
-  revoke(id: string, reason?: string): Promise<ApiKey> {
-    return this.http.delete<ApiKey>(this.path("api-keys", id), {
+  revoke(id: string, reason?: string): Promise<{ status: string }> {
+    return this.http.delete<{ status: string }>(this.path("api-keys", id), {
       query: reason !== undefined ? { reason } : undefined,
     });
   }
