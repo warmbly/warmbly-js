@@ -120,12 +120,13 @@ export class Webhooks extends APIResource {
   }
 
   /**
-   * Re-enqueues a delivery by id, regardless of its current status.
+   * Re-enqueues a delivery by id, regardless of its current status. Returns an
+   * acknowledgement (`{ status: "queued" }`), not the delivery record.
    * @example
-   * await warmbly.webhooks.redeliver("dlv_1");
+   * const { status } = await warmbly.webhooks.redeliver("dlv_1");
    */
-  redeliver(deliveryId: string, opts?: RequestOptions): Promise<WebhookEventDelivery> {
-    return this.http.post<WebhookEventDelivery>(
+  redeliver(deliveryId: string, opts?: RequestOptions): Promise<{ status: string }> {
+    return this.http.post<{ status: string }>(
       this.path("webhooks", "deliveries", deliveryId, "redeliver"),
       opts,
     );
