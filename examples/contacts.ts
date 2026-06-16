@@ -31,7 +31,7 @@ const updated = await warmbly.contacts.update(contact.id, { company: "Acme Inc" 
 console.log("updated company", updated.company);
 
 // 5. Attach a note to the contact.
-const note = await warmbly.contacts.createNote(contact.id, { body: "Called, left voicemail." });
+const note = await warmbly.contacts.createNote(contact.id, { content: "Called, left voicemail." });
 console.log("note added", note.id);
 
 // 6. Read the activity timeline and the activities feed for the contact.
