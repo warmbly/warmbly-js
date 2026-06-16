@@ -104,7 +104,12 @@ export interface ApiErrorBody {
   code?: string;
   /** Request id for support and tracing. */
   request_id?: string;
-  /** Seconds to wait before retrying, present on rate-limit errors. */
+  /**
+   * Milliseconds to wait before retrying, present on rate-limit (429) bodies. The
+   * `Retry-After` response header (in seconds) is the primary source and is preferred.
+   */
+  retry_after_ms?: number;
+  /** Legacy seconds-based retry hint. Kept for resilience; prefer the `Retry-After` header. */
   retry_after?: number;
   [key: string]: unknown;
 }
