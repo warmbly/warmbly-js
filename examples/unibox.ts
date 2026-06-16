@@ -23,7 +23,7 @@ if (!firstItem) {
 } else {
   // Conversations carry both their own id and the thread_id they belong to.
   const conversationId = firstItem.id;
-  const threadId = firstItem.thread_id;
+  const threadId = firstItem.thread_id ?? firstItem.id;
 
   // 3. Open the full thread by thread_id.
   const thread = await warmbly.unibox.thread({ thread_id: threadId });
