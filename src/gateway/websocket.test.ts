@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { WarmblyError } from "../core/errors";
 import type { WebSocketCtor } from "./types";
 import { resolveWebSocket } from "./websocket";
@@ -42,5 +42,34 @@ describe("resolveWebSocket", () => {
     } finally {
       (globalThis as { process?: unknown }).process = proc;
     }
+  });
+
+  it("imports the ws package on Node when no global WebSocket exists", async () => {
+    // ws is an installed optional peer, so the Node fallback resolves to its constructor.
+    delete (globalThis as { WebSocket?: unknown }).WebSocket;
+    const ctor = await resolveWebSocket();
+    expect(typeof ctor).toBe("function");
+  });
+
+  it("throws when the ws import fails on Node", async () => {
+    delete (globalThis as { WebSocket?: unknown }).WebSocket;
+    vi.resetModules();
+    vi.doMock("ws", () => {
+      throw new Error("Cannot find module 'ws'");
+    });
+    const { resolveWebSocket: fresh } = await import("./websocket");
+    await expect(fresh()).rejects.toThrow(/No WebSocket implementation/);
+    vi.doUnmock("ws");
+    vi.resetModules();
+  });
+
+  it("throws when the ws module export is not a constructor", async () => {
+    delete (globalThis as { WebSocket?: unknown }).WebSocket;
+    vi.resetModules();
+    vi.doMock("ws", () => ({ default: 42, WebSocket: undefined }));
+    const { resolveWebSocket: fresh } = await import("./websocket");
+    await expect(fresh()).rejects.toThrow(/No WebSocket implementation/);
+    vi.doUnmock("ws");
+    vi.resetModules();
   });
 });
