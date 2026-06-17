@@ -22,14 +22,20 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
           registry-url: https://registry.npmjs.org
+      # Trusted publishing (OIDC) needs npm >= 11.5.1; Node 22 ships an older npm.
+      - run: npm install -g npm@latest
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
 
       # Opens or updates a "Version Packages" PR; on merge to main, publishes to npm.
-      # Publishing uses npm provenance (publishConfig.provenance + id-token: write).
+      # Publishing uses npm trusted publishing (OIDC, via id-token: write): no NPM
+      # token is needed and provenance is generated automatically. Configure the
+      # trusted publisher for this package on npmjs.com first (package Settings ->
+      # Trusted Publisher: this repo + workflow file release.yml + action npm publish).
+      # The package must already exist on npm, so bootstrap the first version once.
       - name: Create release PR or publish
         uses: changesets/action@v1
         with:
@@ -39,5 +45,3 @@ jobs:
           title: "chore: version packages"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_CONFIG_PROVENANCE: "true"
