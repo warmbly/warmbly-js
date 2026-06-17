@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   constantTimeEqual,
   DEFAULT_WEBHOOK_TOLERANCE_SECONDS,
@@ -123,6 +123,81 @@ describe("verifyWebhookSignature", () => {
     expect(await verifyWebhookSignature({ payload: "x", header: "", secret: SECRET })).toBe(false);
   });
 
+  it("returns false when the secret is missing", async () => {
+    const body = "payload";
+    const t = Math.floor(Date.now() / 1000);
+    const v1 = await sign(SECRET, t, body);
+    expect(
+      await verifyWebhookSignature({ payload: body, header: `t=${t},v1=${v1}`, secret: "" }),
+    ).toBe(false);
+  });
+
+  it("rejects a future-dated timestamp beyond tolerance", async () => {
+    const body = "payload";
+    const t = Math.floor(Date.now() / 1000) + (DEFAULT_WEBHOOK_TOLERANCE_SECONDS + 60);
+    const v1 = await sign(SECRET, t, body);
+    const ok = await verifyWebhookSignature({
+      payload: body,
+      header: `t=${t},v1=${v1}`,
+      secret: SECRET,
+    });
+    expect(ok).toBe(false);
+  });
+
+  it("rejects a non-integer timestamp so no t value is parsed", async () => {
+    const body = "payload";
+    const ok = await verifyWebhookSignature({
+      payload: body,
+      header: "t=not-a-number,v1=deadbeef",
+      secret: SECRET,
+    });
+    expect(ok).toBe(false);
+  });
+
+  it("rejects a fractional timestamp", async () => {
+    const body = "payload";
+    const ok = await verifyWebhookSignature({
+      payload: body,
+      header: "t=1700000000.5,v1=deadbeef",
+      secret: SECRET,
+    });
+    expect(ok).toBe(false);
+  });
+
+  it("skips header parts that have no equals sign", async () => {
+    const body = "payload";
+    const t = Math.floor(Date.now() / 1000);
+    const v1 = await sign(SECRET, t, body);
+    const ok = await verifyWebhookSignature({
+      payload: body,
+      header: `junk,t=${t},v1=${v1}`,
+      secret: SECRET,
+    });
+    expect(ok).toBe(true);
+  });
+
+  it("honors v1 even when an unknown scheme is also present", async () => {
+    const body = '{"event_type":"campaign.email_sent","contact":"lead@warmbly.com"}';
+    const t = Math.floor(Date.now() / 1000);
+    const v1 = await sign(SECRET, t, body);
+    const ok = await verifyWebhookSignature({
+      payload: body,
+      header: `t=${t},v2=ignored,v1=${v1}`,
+      secret: SECRET,
+    });
+    expect(ok).toBe(true);
+  });
+
+  it("returns false when only a timestamp is present without v1", async () => {
+    const t = Math.floor(Date.now() / 1000);
+    const ok = await verifyWebhookSignature({
+      payload: "x",
+      header: `t=${t}`,
+      secret: SECRET,
+    });
+    expect(ok).toBe(false);
+  });
+
   it("parses extra whitespace in the header", async () => {
     const body = "payload";
     const t = Math.floor(Date.now() / 1000);
@@ -147,5 +222,57 @@ describe("constantTimeEqual", () => {
 
   it("returns false for different lengths", () => {
     expect(constantTimeEqual("abc", "abcd")).toBe(false);
+  });
+
+  it("returns true for two empty strings", () => {
+    expect(constantTimeEqual("", "")).toBe(true);
+  });
+
+  it("detects a single trailing character mismatch", () => {
+    expect(constantTimeEqual("deadbeef", "deadbeeg")).toBe(false);
+  });
+});
+
+describe("getSubtle (missing Web Crypto)", () => {
+  const original = globalThis.crypto;
+
+  afterEach(() => {
+    Object.defineProperty(globalThis, "crypto", {
+      configurable: true,
+      writable: true,
+      value: original,
+    });
+  });
+
+  it("throws a clear error when globalThis.crypto.subtle is unavailable", async () => {
+    Object.defineProperty(globalThis, "crypto", {
+      configurable: true,
+      writable: true,
+      value: { subtle: undefined },
+    });
+    const t = Math.floor(Date.now() / 1000);
+    await expect(
+      verifyWebhookSignature({
+        payload: "payload",
+        header: `t=${t},v1=deadbeef`,
+        secret: SECRET,
+      }),
+    ).rejects.toThrow(/Web Crypto/);
+  });
+
+  it("throws when globalThis.crypto itself is absent", async () => {
+    Object.defineProperty(globalThis, "crypto", {
+      configurable: true,
+      writable: true,
+      value: undefined,
+    });
+    const t = Math.floor(Date.now() / 1000);
+    await expect(
+      verifyWebhookSignature({
+        payload: "payload",
+        header: `t=${t},v1=deadbeef`,
+        secret: SECRET,
+      }),
+    ).rejects.toThrow(/Web Crypto/);
   });
 });

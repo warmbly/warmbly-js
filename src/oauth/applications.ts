@@ -9,10 +9,15 @@ import type {
   WebhookEndpointHealth,
 } from "./types";
 
-/** Unwraps a list payload that may be either a bare array or a `{ data: [...] }` envelope. */
-function unwrapList<T>(payload: T[] | { data?: T[] } | undefined): T[] {
+/**
+ * Unwraps a list payload that may be a bare array or an envelope keyed by `data`,
+ * `applications`, or `authorized_apps` (the keys the API uses for these endpoints).
+ */
+function unwrapList<T>(
+  payload: T[] | { data?: T[]; applications?: T[]; authorized_apps?: T[] } | undefined,
+): T[] {
   if (Array.isArray(payload)) return payload;
-  return payload?.data ?? [];
+  return payload?.data ?? payload?.applications ?? payload?.authorized_apps ?? [];
 }
 
 /**
@@ -42,9 +47,9 @@ export class OAuthApplications {
    * const apps = await warmbly.oauth.applications.list();
    */
   async list(): Promise<OAuthApplication[]> {
-    const payload = await this.http.get<OAuthApplication[] | { data?: OAuthApplication[] }>(
-      "/oauth/applications",
-    );
+    const payload = await this.http.get<
+      OAuthApplication[] | { data?: OAuthApplication[]; applications?: OAuthApplication[] }
+    >("/oauth/applications");
     return unwrapList(payload);
   }
 
@@ -165,18 +170,24 @@ export class OAuthApplications {
   /**
    * Lists the applications the current user has authorized.
    *
+   * Note: this endpoint is dashboard-only. It requires a logged-in user session (JWT) and
+   * cannot be called with an API key or an OAuth access token.
+   *
    * @example
    * const apps = await warmbly.oauth.applications.listAuthorizedApps();
    */
   async listAuthorizedApps(): Promise<AuthorizedApp[]> {
-    const payload = await this.http.get<AuthorizedApp[] | { data?: AuthorizedApp[] }>(
-      "/oauth/authorized-apps",
-    );
+    const payload = await this.http.get<
+      AuthorizedApp[] | { data?: AuthorizedApp[]; authorized_apps?: AuthorizedApp[] }
+    >("/oauth/authorized-apps");
     return unwrapList(payload);
   }
 
   /**
    * Revokes a previously authorized application by its authorization id.
+   *
+   * Note: this endpoint is dashboard-only. It requires a logged-in user session (JWT) and
+   * cannot be called with an API key or an OAuth access token.
    *
    * @example
    * await warmbly.oauth.applications.revokeAuthorizedApp("auth_...");

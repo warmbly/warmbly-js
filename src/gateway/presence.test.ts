@@ -27,6 +27,13 @@ describe("PresenceTracker", () => {
     expect(Object.keys(state).sort()).toEqual(["u_2"]);
   });
 
+  it("treats a diff with no joins or leaves as a no-op", () => {
+    const tracker = new PresenceTracker();
+    tracker.applyState({ u_1: { metas: [{ phx_ref: "r1" }] } });
+    const state = tracker.applyDiff({});
+    expect(Object.keys(state)).toEqual(["u_1"]);
+  });
+
   it("reset clears the map", () => {
     const tracker = new PresenceTracker();
     tracker.applyState({ u_1: { metas: [] } });

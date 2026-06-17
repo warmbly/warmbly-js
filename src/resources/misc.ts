@@ -5,21 +5,21 @@ import { APIResource } from "./base";
 /** A folder. Documented-but-open shape. */
 export interface Folder {
   id: string;
-  name?: string;
+  title?: string;
   [key: string]: unknown;
 }
 
 /** A tag. Documented-but-open shape. */
 export interface Tag {
   id: string;
-  name?: string;
+  title?: string;
   [key: string]: unknown;
 }
 
 /** A category. Documented-but-open shape. */
 export interface Category {
   id: string;
-  name?: string;
+  title?: string;
   [key: string]: unknown;
 }
 
@@ -61,23 +61,20 @@ export interface WarmupRoutingRule {
  * audit logs, outreach settings, warmup routing, plans, and timezones.
  *
  * @example
- * const folder = await warmbly.misc.createFolder({ name: "Prospects" });
+ * const folder = await warmbly.misc.createFolder({ title: "Prospects" });
  * const logs = await warmbly.misc.auditLogs();
  */
 export class Misc extends APIResource {
   // --- Folders ---
+  // The API exposes create/update/delete for folders, tags, and categories; there is no
+  // list endpoint for any of the three (they are read through their owning resources).
 
-  /** Lists folders. @example const folders = await warmbly.misc.listFolders(); */
-  listFolders(params?: Record<string, unknown>): Promise<Folder[]> {
-    return this.http.get<Folder[]>("folders", { query: params });
-  }
-
-  /** Creates a folder. @example await warmbly.misc.createFolder({ name: "A" }); */
+  /** Creates a folder. The name goes in the `title` field. @example await warmbly.misc.createFolder({ title: "A" }); */
   createFolder(params: Record<string, unknown>): Promise<Folder> {
     return this.http.post<Folder>("folders", { body: params });
   }
 
-  /** Updates a folder. @example await warmbly.misc.updateFolder("f_1", { name: "B" }); */
+  /** Updates a folder. @example await warmbly.misc.updateFolder("f_1", { title: "B" }); */
   updateFolder(id: string, params: Record<string, unknown>): Promise<Folder> {
     return this.http.patch<Folder>(this.path("folders", id), { body: params });
   }
@@ -89,17 +86,12 @@ export class Misc extends APIResource {
 
   // --- Tags ---
 
-  /** Lists tags. @example const tags = await warmbly.misc.listTags(); */
-  listTags(params?: Record<string, unknown>): Promise<Tag[]> {
-    return this.http.get<Tag[]>("tags", { query: params });
-  }
-
-  /** Creates a tag. @example await warmbly.misc.createTag({ name: "hot" }); */
+  /** Creates a tag. The name goes in the `title` field. @example await warmbly.misc.createTag({ title: "hot" }); */
   createTag(params: Record<string, unknown>): Promise<Tag> {
     return this.http.post<Tag>("tags", { body: params });
   }
 
-  /** Updates a tag. @example await warmbly.misc.updateTag("t_1", { name: "warm" }); */
+  /** Updates a tag. @example await warmbly.misc.updateTag("t_1", { title: "warm" }); */
   updateTag(id: string, params: Record<string, unknown>): Promise<Tag> {
     return this.http.patch<Tag>(this.path("tags", id), { body: params });
   }
@@ -111,17 +103,12 @@ export class Misc extends APIResource {
 
   // --- Categories ---
 
-  /** Lists categories. @example const cats = await warmbly.misc.listCategories(); */
-  listCategories(params?: Record<string, unknown>): Promise<Category[]> {
-    return this.http.get<Category[]>("categories", { query: params });
-  }
-
-  /** Creates a category. @example await warmbly.misc.createCategory({ name: "VIP" }); */
+  /** Creates a category. The name goes in the `title` field. @example await warmbly.misc.createCategory({ title: "VIP" }); */
   createCategory(params: Record<string, unknown>): Promise<Category> {
     return this.http.post<Category>("categories", { body: params });
   }
 
-  /** Updates a category. @example await warmbly.misc.updateCategory("c_1", { name: "X" }); */
+  /** Updates a category. @example await warmbly.misc.updateCategory("c_1", { title: "X" }); */
   updateCategory(id: string, params: Record<string, unknown>): Promise<Category> {
     return this.http.patch<Category>(this.path("categories", id), { body: params });
   }
@@ -135,7 +122,7 @@ export class Misc extends APIResource {
 
   /** Lists teams. @example const teams = await warmbly.misc.listTeams(); */
   listTeams(params?: Record<string, unknown>): Promise<Team[]> {
-    return this.http.get<Team[]>("teams", { query: params });
+    return this.http.get<{ data: Team[] }>("teams", { query: params }).then((r) => r.data ?? []);
   }
 
   /** Creates a team. @example await warmbly.misc.createTeam({ name: "Sales" }); */
@@ -188,7 +175,11 @@ export class Misc extends APIResource {
     return this.http.get<Record<string, unknown>>("outreach/settings", opts);
   }
 
-  /** Updates outreach settings. @example await warmbly.misc.updateOutreachSettings({ daily_cap: 100 }); */
+  /**
+   * Updates outreach settings. The settings object must be wrapped under a `settings` key.
+   * @example
+   * await warmbly.misc.updateOutreachSettings({ settings: { daily_cap: 100 } });
+   */
   updateOutreachSettings(params: Record<string, unknown>): Promise<Record<string, unknown>> {
     return this.http.patch<Record<string, unknown>>("outreach/settings", { body: params });
   }
@@ -197,7 +188,9 @@ export class Misc extends APIResource {
 
   /** Lists warmup routing rules. @example const rules = await warmbly.misc.listWarmupRouting(); */
   listWarmupRouting(params?: Record<string, unknown>): Promise<WarmupRoutingRule[]> {
-    return this.http.get<WarmupRoutingRule[]>("warmup/routing", { query: params });
+    return this.http
+      .get<{ rules: WarmupRoutingRule[] }>("warmup/routing", { query: params })
+      .then((r) => r.rules ?? []);
   }
 
   /** Creates a warmup routing rule. @example await warmbly.misc.createWarmupRouting({}); */
@@ -221,7 +214,7 @@ export class Misc extends APIResource {
 
   /** Lists available plans. @example const plans = await warmbly.misc.plans(); */
   plans(opts?: RequestOptions): Promise<Plan[]> {
-    return this.http.get<Plan[]>("plans", opts);
+    return this.http.get<{ plans: Plan[] }>("plans", opts).then((r) => r.plans ?? []);
   }
 
   /** Lists supported timezones. @example const tz = await warmbly.misc.timezones(); */

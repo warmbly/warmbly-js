@@ -79,4 +79,4 @@ console.log("usage summary:", summary);
 // Revoke the key we just created, recording a reason.
 // ---------------------------------------------------------------------------
 const revoked = await warmbly.apiKeys.revoke(created.id, "example cleanup");
-console.log("revoked key", revoked.id, "status now:", revoked.status);
+console.log("revoked key", created.id, "status now:", revoked.status);

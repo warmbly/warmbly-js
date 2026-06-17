@@ -29,12 +29,42 @@ export interface AddContactParams {
   [key: string]: unknown;
 }
 
+/** The author of a contact note, joined into the response when available. Open shape. */
+export interface ContactNoteAuthor {
+  id?: string;
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+  avatar_url?: string;
+  [key: string]: unknown;
+}
+
 /** A note attached to a contact. */
 export interface ContactNote {
   id: string;
   contact_id?: string;
-  body?: string;
+  organization_id?: string;
+  user_id?: string;
+  /** The note text. */
+  content?: string;
   created_at?: string;
+  updated_at?: string;
+  /** The note author, when the API joins it. */
+  user?: ContactNoteAuthor;
+  [key: string]: unknown;
+}
+
+/** Body for creating a contact note. */
+export interface CreateContactNoteParams {
+  /** The note text (required, up to 10000 characters). */
+  content: string;
+  [key: string]: unknown;
+}
+
+/** Body for updating a contact note. */
+export interface UpdateContactNoteParams {
+  /** The replacement note text. */
+  content?: string;
   [key: string]: unknown;
 }
 
@@ -229,20 +259,20 @@ export class Contacts extends APIResource {
   }
 
   /**
-   * Adds a note to a contact.
+   * Adds a note to a contact. The note text goes in the `content` field.
    * @example
-   * await warmbly.contacts.createNote("c_1", { body: "Called, no answer" });
+   * await warmbly.contacts.createNote("c_1", { content: "Called, no answer" });
    */
-  createNote(id: string, params: Record<string, unknown>): Promise<ContactNote> {
+  createNote(id: string, params: CreateContactNoteParams): Promise<ContactNote> {
     return this.http.post<ContactNote>(this.path("contacts", id, "notes"), { body: params });
   }
 
   /**
-   * Updates a note on a contact.
+   * Updates a note on a contact. The note text goes in the `content` field.
    * @example
-   * await warmbly.contacts.updateNote("c_1", "n_1", { body: "Updated" });
+   * await warmbly.contacts.updateNote("c_1", "n_1", { content: "Updated" });
    */
-  updateNote(id: string, noteId: string, params: Record<string, unknown>): Promise<ContactNote> {
+  updateNote(id: string, noteId: string, params: UpdateContactNoteParams): Promise<ContactNote> {
     return this.http.patch<ContactNote>(this.path("contacts", id, "notes", noteId), {
       body: params,
     });

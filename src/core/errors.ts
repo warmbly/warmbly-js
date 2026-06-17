@@ -91,7 +91,13 @@ export class WarmblyAPIError extends WarmblyError {
     if (status === 409) return new ConflictError(message, options);
     if (status === 422) return new UnprocessableEntityError(message, options);
     if (status === 429) {
-      const retryAfter = retryAfterSeconds(headers) ?? parsed.retry_after;
+      // The Retry-After header (seconds) is authoritative; fall back to the body,
+      // which carries milliseconds (`retry_after_ms`) or a legacy seconds field.
+      const bodyRetryAfter =
+        parsed.retry_after_ms !== undefined
+          ? Math.ceil(parsed.retry_after_ms / 1000)
+          : parsed.retry_after;
+      const retryAfter = retryAfterSeconds(headers) ?? bodyRetryAfter;
       return new RateLimitError(message, { ...options, retryAfter });
     }
     if (status >= 500) return new InternalServerError(message, options);

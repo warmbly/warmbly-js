@@ -137,12 +137,15 @@ export class Unibox extends APIResource {
   }
 
   /**
-   * Removes a snooze.
+   * Removes a snooze. The thread is identified by the `thread_id` query parameter.
    * @example
    * await warmbly.unibox.unsnooze({ thread_id: "t_1" });
    */
-  unsnooze(params?: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return this.http.delete<Record<string, unknown>>("unibox/snooze", { body: params });
+  unsnooze(params: {
+    thread_id: string;
+    [key: string]: unknown;
+  }): Promise<Record<string, unknown>> {
+    return this.http.delete<Record<string, unknown>>("unibox/snooze", { query: params });
   }
 
   /**

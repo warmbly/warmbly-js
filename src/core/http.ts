@@ -189,11 +189,16 @@ export class HttpClient {
   }
 
   private encodeBody(opts: RequestOptions): {
-    body: string | undefined;
+    body: string | FormData | undefined;
     contentType: string | undefined;
   } {
     if (opts.body === undefined || opts.body === null) {
       return { body: undefined, contentType: undefined };
+    }
+    // Multipart uploads: pass FormData straight through so the runtime sets the
+    // multipart/form-data Content-Type with its boundary. Never JSON-encode it.
+    if (typeof FormData !== "undefined" && opts.body instanceof FormData) {
+      return { body: opts.body, contentType: undefined };
     }
     if (opts.form === true) {
       return {

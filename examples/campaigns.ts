@@ -29,10 +29,12 @@ while (page.hasNextPage()) {
   console.log("next page count", page.data.length);
 }
 
-// 5. Inspect the sequence steps, then append a follow-up step.
+// 5. Inspect the sequence steps, then append a follow-up step. createStep adds
+// a new empty step to the sequence; fill in its content with updateStep.
 const steps = await warmbly.campaigns.listSteps(campaign.id);
 console.log("existing steps", steps.length);
-const step = await warmbly.campaigns.createStep(campaign.id, {
+const step = await warmbly.campaigns.createStep(campaign.id);
+await warmbly.campaigns.updateStep(campaign.id, step.id, {
   subject: "Following up",
   body: "Hi {{first_name}}, just circling back.",
   delay_days: 3,

@@ -32,6 +32,7 @@ export const HEADER = {
   retryAfter: "Retry-After",
   rateLimitLimit: "X-RateLimit-Limit",
   rateLimitRemaining: "X-RateLimit-Remaining",
+  rateLimitReset: "X-RateLimit-Reset",
   rateLimitPolicy: "X-RateLimit-Policy",
 } as const;
 

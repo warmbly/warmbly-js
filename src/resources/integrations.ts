@@ -21,6 +21,12 @@ export interface IntegrationEvent {
   [key: string]: unknown;
 }
 
+/** A connection plus its event subscriptions and recent sync runs, as returned by {@link Integrations.getConnection}. */
+export interface IntegrationConnectionDetail extends IntegrationConnection {
+  events?: IntegrationEvent[];
+  runs?: Record<string, unknown>[];
+}
+
 /**
  * Manage third-party integrations: catalog, connections, events, field mappings, runs,
  * webhook secret, test/push, and bookings. Reachable as `warmbly.integrations`.
@@ -36,7 +42,9 @@ export class Integrations extends APIResource {
    * const catalog = await warmbly.integrations.catalog();
    */
   catalog(params?: Record<string, unknown>): Promise<IntegrationCatalogEntry[]> {
-    return this.http.get<IntegrationCatalogEntry[]>("integrations/catalog", { query: params });
+    return this.http
+      .get<{ catalog: IntegrationCatalogEntry[] }>("integrations/catalog", { query: params })
+      .then((r) => r.catalog ?? []);
   }
 
   /**
@@ -45,7 +53,9 @@ export class Integrations extends APIResource {
    * const conns = await warmbly.integrations.listConnections();
    */
   listConnections(params?: Record<string, unknown>): Promise<IntegrationConnection[]> {
-    return this.http.get<IntegrationConnection[]>("integrations/connections", { query: params });
+    return this.http
+      .get<{ connections: IntegrationConnection[] }>("integrations/connections", { query: params })
+      .then((r) => r.connections ?? []);
   }
 
   /**
@@ -58,12 +68,20 @@ export class Integrations extends APIResource {
   }
 
   /**
-   * Retrieves a connection by id.
+   * Retrieves a connection by id, with its event subscriptions and recent runs attached
+   * as `events` and `runs`.
    * @example
    * const conn = await warmbly.integrations.getConnection("conn_1");
+   * console.log(conn.events, conn.runs);
    */
-  getConnection(id: string, opts?: RequestOptions): Promise<IntegrationConnection> {
-    return this.http.get<IntegrationConnection>(this.path("integrations", "connections", id), opts);
+  getConnection(id: string, opts?: RequestOptions): Promise<IntegrationConnectionDetail> {
+    return this.http
+      .get<{
+        connection: IntegrationConnection;
+        events: IntegrationEvent[];
+        runs: Record<string, unknown>[];
+      }>(this.path("integrations", "connections", id), opts)
+      .then((r) => ({ ...r.connection, events: r.events, runs: r.runs }));
   }
 
   /**
@@ -75,10 +93,12 @@ export class Integrations extends APIResource {
     id: string,
     params: Record<string, unknown>,
   ): Promise<IntegrationConnection> {
-    return this.http.patch<IntegrationConnection>(
-      this.path("integrations", "connections", id, "config"),
-      { body: params },
-    );
+    return this.http
+      .patch<{ connection: IntegrationConnection }>(
+        this.path("integrations", "connections", id, "config"),
+        { body: params },
+      )
+      .then((r) => r.connection);
   }
 
   /**
@@ -96,10 +116,11 @@ export class Integrations extends APIResource {
    * const events = await warmbly.integrations.listConnectionEvents("conn_1");
    */
   listConnectionEvents(id: string, params?: Record<string, unknown>): Promise<IntegrationEvent[]> {
-    return this.http.get<IntegrationEvent[]>(
-      this.path("integrations", "connections", id, "events"),
-      { query: params },
-    );
+    return this.http
+      .get<{ events: IntegrationEvent[] }>(this.path("integrations", "connections", id, "events"), {
+        query: params,
+      })
+      .then((r) => r.events ?? []);
   }
 
   /**
@@ -131,11 +152,13 @@ export class Integrations extends APIResource {
    * @example
    * const mappings = await warmbly.integrations.getFieldMappings("conn_1");
    */
-  getFieldMappings(id: string, opts?: RequestOptions): Promise<Record<string, unknown>> {
-    return this.http.get<Record<string, unknown>>(
-      this.path("integrations", "connections", id, "field-mappings"),
-      opts,
-    );
+  getFieldMappings(id: string, opts?: RequestOptions): Promise<Record<string, unknown>[]> {
+    return this.http
+      .get<{ mappings: Record<string, unknown>[] }>(
+        this.path("integrations", "connections", id, "field-mappings"),
+        opts,
+      )
+      .then((r) => r.mappings ?? []);
   }
 
   /**
@@ -143,11 +166,16 @@ export class Integrations extends APIResource {
    * @example
    * await warmbly.integrations.setFieldMappings("conn_1", { mappings: [] });
    */
-  setFieldMappings(id: string, params: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return this.http.put<Record<string, unknown>>(
-      this.path("integrations", "connections", id, "field-mappings"),
-      { body: params },
-    );
+  setFieldMappings(
+    id: string,
+    params: Record<string, unknown>,
+  ): Promise<Record<string, unknown>[]> {
+    return this.http
+      .put<{ mappings: Record<string, unknown>[] }>(
+        this.path("integrations", "connections", id, "field-mappings"),
+        { body: params },
+      )
+      .then((r) => r.mappings ?? []);
   }
 
   /**
@@ -155,11 +183,13 @@ export class Integrations extends APIResource {
    * @example
    * const runs = await warmbly.integrations.listRuns("conn_1");
    */
-  listRuns(id: string, params?: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return this.http.get<Record<string, unknown>>(
-      this.path("integrations", "connections", id, "runs"),
-      { query: params },
-    );
+  listRuns(id: string, params?: Record<string, unknown>): Promise<Record<string, unknown>[]> {
+    return this.http
+      .get<{ runs: Record<string, unknown>[] }>(
+        this.path("integrations", "connections", id, "runs"),
+        { query: params },
+      )
+      .then((r) => r.runs ?? []);
   }
 
   /**

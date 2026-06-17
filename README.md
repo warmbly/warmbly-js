@@ -1,6 +1,11 @@
 <div align="center">
 
-# warmbly
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./assets/warmbly-dark.svg">
+  <img alt="Warmbly" src="./assets/warmbly-light.svg" width="340">
+</picture>
+
+<br>
 
 **The official Warmbly SDK for JavaScript and TypeScript.**
 
@@ -8,7 +13,6 @@ A typed REST client, an OAuth2 helper, and a realtime gateway in one zero-depend
 
 [![npm version](https://img.shields.io/npm/v/warmbly?color=2563eb&label=npm)](https://www.npmjs.com/package/warmbly)
 [![CI](https://img.shields.io/github/actions/workflow/status/warmbly/warmbly-js/ci.yml?branch=main&label=CI)](https://github.com/warmbly/warmbly-js/actions/workflows/ci.yml)
-[![Bundle size](https://img.shields.io/bundlephobia/minzip/warmbly?label=min%2Bgzip)](https://bundlephobia.com/package/warmbly)
 [![Types](https://img.shields.io/npm/types/warmbly)](https://www.npmjs.com/package/warmbly)
 [![Downloads](https://img.shields.io/npm/dm/warmbly?color=2563eb)](https://www.npmjs.com/package/warmbly)
 [![License](https://img.shields.io/npm/l/warmbly)](./LICENSE)

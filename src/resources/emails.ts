@@ -18,7 +18,29 @@ export interface EmailAccount {
 export interface ListEmailsParams {
   cursor?: string;
   limit?: number;
-  status?: string;
+  /** Full-text search across the mailbox address and label. */
+  q?: string;
+  /** Filter to mailboxes carrying this tag. */
+  tag?: string;
+  [key: string]: unknown;
+}
+
+/** Body for sending a one-off email. The platform requires `body_html` and/or `body_plain`. */
+export interface SendEmailParams {
+  /** One or more recipient addresses. */
+  to: string[];
+  subject?: string;
+  /** HTML body. Provide this and/or `body_plain`. */
+  body_html?: string;
+  /** Plain-text body. Provide this and/or `body_html`. */
+  body_plain?: string;
+  [key: string]: unknown;
+}
+
+/** Query params for updating a mailbox's tracking domain. */
+export interface TrackParams {
+  /** The custom tracking domain to apply (sent as the `domain` query parameter). */
+  domain: string;
   [key: string]: unknown;
 }
 
@@ -73,12 +95,13 @@ export class Emails extends APIResource {
   }
 
   /**
-   * Updates a mailbox's open/click tracking settings.
+   * Sets a mailbox's custom open/click tracking domain. The domain is sent as the
+   * `domain` query parameter (the platform reads it from the query string, not the body).
    * @example
-   * await warmbly.emails.track("mb_1", { open_tracking: true });
+   * await warmbly.emails.track("mb_1", { domain: "track.warmbly.com" });
    */
-  track(id: string, params: Record<string, unknown>): Promise<EmailAccount> {
-    return this.http.patch<EmailAccount>(this.path("emails", id, "track"), { body: params });
+  track(id: string, params: TrackParams): Promise<EmailAccount> {
+    return this.http.patch<EmailAccount>(this.path("emails", id, "track"), { query: params });
   }
 
   /**
@@ -127,11 +150,15 @@ export class Emails extends APIResource {
   }
 
   /**
-   * Sends a one-off email from a mailbox.
+   * Sends a one-off email from a mailbox. Provide `body_html` and/or `body_plain`.
    * @example
-   * await warmbly.emails.send("mb_1", { to: "team@warmbly.com", subject: "Hi", body: "..." });
+   * await warmbly.emails.send("mb_1", {
+   *   to: ["team@warmbly.com"],
+   *   subject: "Hi",
+   *   body_html: "<p>Hello from Warmbly</p>",
+   * });
    */
-  send(id: string, params: Record<string, unknown>): Promise<Record<string, unknown>> {
+  send(id: string, params: SendEmailParams): Promise<Record<string, unknown>> {
     return this.http.post<Record<string, unknown>>(this.path("emails", id, "send"), {
       body: params,
     });

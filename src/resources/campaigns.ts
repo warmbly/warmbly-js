@@ -226,13 +226,25 @@ export class Campaigns extends APIResource {
   }
 
   /**
-   * Adds an attachment to a campaign.
+   * Uploads an attachment to a campaign as `multipart/form-data`. Pass the file as a
+   * `Blob` or `File`; optionally scope it to a step and set the upload filename. Works in
+   * any runtime with global `FormData`/`Blob` (Node 20+, Bun, Deno, browsers, the edge).
    * @example
-   * await warmbly.campaigns.createAttachment("camp_1", { file_id: "f_1" });
+   * const file = new Blob(["hello"], { type: "text/plain" });
+   * await warmbly.campaigns.createAttachment("camp_1", file, { filename: "note.txt" });
    */
-  createAttachment(id: string, params: Record<string, unknown>): Promise<CampaignAttachment> {
+  createAttachment(
+    id: string,
+    file: Blob,
+    params?: { step_id?: string; filename?: string },
+    opts?: RequestOptions,
+  ): Promise<CampaignAttachment> {
+    const form = new FormData();
+    form.append("file", file, params?.filename);
+    if (params?.step_id !== undefined) form.append("step_id", params.step_id);
     return this.http.post<CampaignAttachment>(this.path("campaigns", id, "attachments"), {
-      body: params,
+      ...opts,
+      body: form,
     });
   }
 
@@ -297,12 +309,14 @@ export class Campaigns extends APIResource {
   }
 
   /**
-   * Adds a step to a campaign sequence.
+   * Adds a step to a campaign sequence. The endpoint creates a new empty step for the
+   * campaign and returns it; edit its content afterwards with {@link Campaigns.updateStep}.
    * @example
-   * await warmbly.campaigns.createStep("camp_1", { subject: "Follow up" });
+   * const step = await warmbly.campaigns.createStep("camp_1");
+   * await warmbly.campaigns.updateStep("camp_1", step.id, { subject: "Follow up" });
    */
-  createStep(id: string, params: Record<string, unknown>): Promise<CampaignStep> {
-    return this.http.post<CampaignStep>(this.path("campaigns", id, "steps"), { body: params });
+  createStep(id: string, opts?: RequestOptions): Promise<CampaignStep> {
+    return this.http.post<CampaignStep>(this.path("campaigns", id, "steps"), opts);
   }
 
   /**
