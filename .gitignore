@@ -38,6 +38,8 @@ yarn-error.log*
 
 # Editor / OS
 .DS_Store
+# AppleDouble sidecars, created when the repo lives on a non-HFS+ volume.
+._*
 Thumbs.db
 .idea/
 *.swp

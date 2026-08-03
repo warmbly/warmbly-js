@@ -14,8 +14,18 @@ describe("intents", () => {
       "MEETING",
       "NOTIFICATION",
       "CUSTOM",
+      "AI",
+      "RESEARCH",
+      "BILLING",
     ]);
     expect(GatewayIntents.EMAIL).toBe("EMAIL");
+  });
+
+  it("matches the AI, research, and billing events with their intents", () => {
+    expect(matchesIntents("AI_DRAFT_READY", ["AI"])).toBe(true);
+    expect(matchesIntents("AI_RESEARCH_PROGRESS", ["RESEARCH"])).toBe(true);
+    expect(matchesIntents("BILLING_CREDITS_LOW", ["BILLING"])).toBe(true);
+    expect(matchesIntents("EMAIL_SENT", ["BILLING"])).toBe(false);
   });
 
   it("normalizes by trimming, uppercasing, and deduping", () => {

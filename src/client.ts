@@ -12,13 +12,19 @@ import type { GatewayOptions, GatewayTokenProvider } from "./gateway/types";
 import { OAuthApplications } from "./oauth/applications";
 import { OAuthClient } from "./oauth/oauth";
 import {
+  Advisor,
+  AISkills,
   Analytics,
   ApiKeys,
+  Automations,
   Campaigns,
   Contacts,
   Crm,
   Emails,
+  Generation,
   Integrations,
+  LeadSync,
+  Meetings,
   Misc,
   Templates,
   Unibox,
@@ -74,15 +80,27 @@ export class Warmbly {
   readonly unibox: Unibox;
   /** Dashboard, deliverability, warmup, and per-campaign analytics. */
   readonly analytics: Analytics;
+  /** Continuous recommendations about the workspace's sending posture. */
+  readonly advisor: Advisor;
+  /** AI writing: compose, rewrite a selection, and preview AI variables. */
+  readonly generation: Generation;
+  /** Organization playbooks every AI surface follows. */
+  readonly aiSkills: AISkills;
   /** Reply templates: render, score, duplicate, and reorder. */
   readonly templates: Templates;
   /** CRM pipelines, deals, task types, and tasks. */
   readonly crm: Crm;
+  /** Booked calls from Calendly and Cal.com, plus meetings you log by hand. */
+  readonly meetings: Meetings;
   /** Third-party integrations: connections, events, field mappings, and bookings. */
   readonly integrations: Integrations;
+  /** The visual flow builder: trigger events plus action steps across integrations. */
+  readonly automations: Automations;
+  /** On-demand Google Sheets to contacts sync. */
+  readonly leadSync: LeadSync;
   /** Outbound webhook endpoints, deliveries, and event types. */
   readonly webhooks: Webhooks;
-  /** Folders, tags, categories, teams, audit logs, outreach, warmup routing, plans, and timezones. */
+  /** Caller identity, folders, tags, categories, teams, audit logs, outreach, deliverability ingestion, the task DLQ, warmup routing, plans, and timezones. */
   readonly misc: Misc;
   /** Manage your own OAuth applications (requires the `API_KEYS` scope). */
   readonly oauthApplications: OAuthApplications;
@@ -97,9 +115,15 @@ export class Warmbly {
     this.emails = new Emails(this.http);
     this.unibox = new Unibox(this.http);
     this.analytics = new Analytics(this.http);
+    this.advisor = new Advisor(this.http);
+    this.generation = new Generation(this.http);
+    this.aiSkills = new AISkills(this.http);
     this.templates = new Templates(this.http);
     this.crm = new Crm(this.http);
+    this.meetings = new Meetings(this.http);
     this.integrations = new Integrations(this.http);
+    this.automations = new Automations(this.http);
+    this.leadSync = new LeadSync(this.http);
     this.webhooks = new Webhooks(this.http);
     this.misc = new Misc(this.http);
     this.oauthApplications = new OAuthApplications(this.http);

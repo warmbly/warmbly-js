@@ -229,3 +229,20 @@ describe("OAuthApplications.revokeAuthorizedApp", () => {
     expect(del).toHaveBeenCalledWith("/oauth/authorized-apps/a%2Fb");
   });
 });
+
+describe("OAuthApplications.uploadLogo", () => {
+  it("posts multipart form data to the id-less logo path", async () => {
+    const post = vi.fn(async () => ({ logo_url: "https://cdn.warmbly.com/logo.png" }));
+    const apps = new OAuthApplications(stubHttp({ post }));
+    const file = new Blob(["png-bytes"], { type: "image/png" });
+
+    const result = await apps.uploadLogo(file, "logo.png");
+    expect(result.logo_url).toBe("https://cdn.warmbly.com/logo.png");
+
+    // The path carries no app id: the logo is uploaded before the app exists.
+    const [path, opts] = post.mock.calls[0] as unknown as [string, { body: FormData }];
+    expect(path).toBe("/oauth/application-logo");
+    expect(opts.body).toBeInstanceOf(FormData);
+    expect(opts.body.get("file")).toBeInstanceOf(Blob);
+  });
+});
