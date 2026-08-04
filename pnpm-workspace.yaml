@@ -1,0 +1,5 @@
+# pnpm 10 reads build-script approvals from here, not from the "pnpm" field in
+# package.json. esbuild is tsup's bundler and needs its postinstall to fetch a
+# platform binary; without this approval it installs unbuilt and the build fails.
+onlyBuiltDependencies:
+  - esbuild
