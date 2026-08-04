@@ -135,7 +135,8 @@ describe("Gateway connect handshake", () => {
     expect(socket.url).toContain("/socket/websocket?vsn=1.0.0&token=wmbly_x");
     const join = socket.frames().find((f) => f[3] === "phx_join");
     expect(join?.[2]).toBe("org:org_1");
-    expect((join?.[4] as { intents: string[] }).intents).toEqual(["EMAIL", "CAMPAIGN"]);
+    const joinPayload = join?.[4] as { intents: string[] } | undefined;
+    expect(joinPayload?.intents).toEqual(["EMAIL", "CAMPAIGN"]);
     expect(states).toEqual(["open", "hello", "ready"]);
     expect(gw.state).toBe("ready");
     expect(gw.latestSeq).toBe(10);
@@ -343,7 +344,8 @@ describe("Gateway reconnect and resume", () => {
     second.open();
     await Promise.resolve();
     const join = second.frames().find((f) => f[3] === "phx_join");
-    expect((join?.[4] as { resume?: { last_seq: number } }).resume).toEqual({ last_seq: 42 });
+    const joinPayload = join?.[4] as { resume?: { last_seq: number } } | undefined;
+    expect(joinPayload?.resume).toEqual({ last_seq: 42 });
   });
 
   it("does not reconnect on a permission-denied close", async () => {

@@ -22,7 +22,13 @@
     "resolveJsonModule": true,
     "skipLibCheck": true,
 
-    "moduleDetection": "force"
+    "moduleDetection": "force",
+
+    // tsup 8.5.1 injects `baseUrl` into its internal declaration build, which
+    // TypeScript 6 rejects as deprecated (TS5101). We set no `baseUrl` of our
+    // own, so this only silences tsup's. Remove it once tsup stops injecting it;
+    // TypeScript 7 drops the option entirely.
+    "ignoreDeprecations": "6.0"
   },
   "include": ["src"],
   "exclude": ["dist", "node_modules", "examples", "**/*.test.ts"]

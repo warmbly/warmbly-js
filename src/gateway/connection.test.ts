@@ -176,7 +176,8 @@ describe("Connection.close", () => {
     const conn = new Connection(socket, { onError });
     conn.close();
     expect(onError).toHaveBeenCalledWith(expect.any(Error));
-    expect((onError.mock.calls[0]?.[0] as Error).message).toBe("already closing");
+    const error = onError.mock.calls[0]?.[0] as Error | undefined;
+    expect(error?.message).toBe("already closing");
   });
 
   it("swallows a close failure when no onError handler is set", () => {
@@ -337,7 +338,8 @@ describe("Connection error events and toError normalization", () => {
     const onError = vi.fn();
     new Connection(socket, { onError });
     socket.fire("error", { type: "error" });
-    expect((onError.mock.calls[0]?.[0] as Error).message).toBe("WebSocket transport error");
+    const error = onError.mock.calls[0]?.[0] as Error | undefined;
+    expect(error?.message).toBe("WebSocket transport error");
   });
 
   it("does not throw on an error event when no onError handler is set", () => {
