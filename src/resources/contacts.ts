@@ -68,6 +68,91 @@ export interface UpdateContactNoteParams {
   [key: string]: unknown;
 }
 
+/** A public artifact cited by AI contact research. */
+export interface ResearchArtifact {
+  what?: string;
+  where?: string;
+  when?: string;
+  /** Source URL. Research only saves cited findings, so this is always present. */
+  url: string;
+  [key: string]: unknown;
+}
+
+/** A cited fact uncovered by AI contact research. */
+export interface ResearchSignal {
+  type?: string;
+  fact?: string;
+  when?: string;
+  /** Source URL backing the fact. */
+  url: string;
+  confidence?: "high" | "medium" | "low";
+  [key: string]: unknown;
+}
+
+/** An opener line grounded in a research signal. */
+export interface ResearchHook {
+  based_on?: string;
+  why_relevant?: string;
+  opener_line?: string;
+  [key: string]: unknown;
+}
+
+/** The findings of one AI contact-research run. */
+export interface ResearchResult {
+  company?: {
+    summary?: string;
+    industry?: string;
+    size_estimate?: string;
+    sells_to?: string;
+    tech_or_stack_signals?: string[];
+    [key: string]: unknown;
+  };
+  person?: {
+    role_confirmed?: boolean;
+    title?: string;
+    public_artifacts?: ResearchArtifact[];
+    [key: string]: unknown;
+  };
+  signals?: ResearchSignal[];
+  hooks?: ResearchHook[];
+  /** Custom-field values the run proposes for the contact. */
+  custom_field_updates?: Record<string, string>;
+  research_notes?: string;
+  /** True when the run found nothing citable. It is still billed. */
+  nothing_found?: boolean;
+  [key: string]: unknown;
+}
+
+/** One AI contact-research run. Charges credits even when it finds nothing. */
+export interface ContactResearchRun {
+  id: string;
+  org_id?: string;
+  contact_id?: string;
+  requested_by?: string;
+  status?: "pending" | "running" | "succeeded" | "failed" | string;
+  objective?: string;
+  result?: ResearchResult;
+  error?: string;
+  credits_charged?: number;
+  model_used?: string;
+  tokens_used?: number;
+  created_at?: string;
+  updated_at?: string;
+  [key: string]: unknown;
+}
+
+/** Body for {@link Contacts.research} and {@link Contacts.researchBatch}. */
+export interface ResearchParams {
+  /** What the run should look for. Optional; the platform has a sensible default. */
+  objective?: string;
+  [key: string]: unknown;
+}
+
+/** Body for {@link Contacts.researchBatch}: up to 500 contact ids, drained in the background. */
+export interface BatchResearchParams extends ResearchParams {
+  contact_ids: string[];
+}
+
 /** Query/body for searching contacts. */
 export interface ContactSearchParams {
   cursor?: string;
@@ -176,6 +261,63 @@ export class Contacts extends APIResource {
    */
   lookup(params: Record<string, unknown>): Promise<Contact> {
     return this.http.get<Contact>("contacts/lookup", { query: params });
+  }
+
+  /**
+   * Lists the distinct custom-field keys used across the organization's contacts,
+   * ranked by frequency and capped at 200. Useful for building a variable picker.
+   *
+   * @example
+   * const keys = await warmbly.contacts.customFields(); // ["industry", "seat_count"]
+   */
+  customFields(opts?: RequestOptions): Promise<string[]> {
+    return this.http
+      .get<{ data: string[] }>("contacts/custom-fields", opts)
+      .then((r) => r.data ?? []);
+  }
+
+  /**
+   * Queues AI research for many contacts at once (up to 500 ids). The batch drains in
+   * the background and reports progress over the `AI_RESEARCH_PROGRESS` gateway event.
+   * Requires the `AI_RESEARCH` scope.
+   *
+   * @example
+   * const { queued } = await warmbly.contacts.researchBatch({
+   *   contact_ids: ["c_1", "c_2"],
+   *   objective: "Find a recent funding or hiring signal",
+   * });
+   */
+  researchBatch(params: BatchResearchParams): Promise<{ queued: number }> {
+    return this.http.post<{ queued: number }>("contacts/research/batch", { body: params });
+  }
+
+  /**
+   * Runs AI research on one contact and returns the completed run. Executes inside the
+   * request, charges credits (billable even when it finds nothing), and only saves
+   * cited findings. Requires the `AI_RESEARCH` scope.
+   *
+   * @example
+   * const run = await warmbly.contacts.research("c_1", { objective: "Recent product launches" });
+   * for (const signal of run.result?.signals ?? []) console.log(signal.fact, signal.url);
+   */
+  research(id: string, params?: ResearchParams): Promise<ContactResearchRun> {
+    return this.http.post<ContactResearchRun>(this.path("contacts", id, "research"), {
+      body: params,
+    });
+  }
+
+  /**
+   * Lists a contact's past AI research runs, newest first. Requires the `AI_RESEARCH` scope.
+   *
+   * @example
+   * const runs = await warmbly.contacts.listResearch("c_1");
+   */
+  listResearch(id: string, params?: Record<string, unknown>): Promise<ContactResearchRun[]> {
+    return this.http
+      .get<{ data: ContactResearchRun[] }>(this.path("contacts", id, "research"), {
+        query: params,
+      })
+      .then((r) => r.data ?? []);
   }
 
   /**

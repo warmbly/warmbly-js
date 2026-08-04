@@ -57,14 +57,87 @@ export interface WarmupRoutingRule {
 }
 
 /**
- * Small standalone resources grouped together: folders, tags, categories, teams,
- * audit logs, outreach settings, warmup routing, plans, and timezones.
+ * Who the active credential belongs to. Requires no specific permission, so it is the
+ * right call for validating a connection and labelling it for a human.
+ */
+export interface Identity {
+  user_id: string;
+  email?: string;
+  name?: string;
+  first_name?: string;
+  last_name?: string;
+  /** The organization the credential acts on, when it is bound to one. */
+  organization_id?: string;
+  organization_name?: string;
+  /** How the caller authenticated. */
+  auth_type?: "api_key" | "oauth" | "jwt" | string;
+  /** The scope strings the credential was granted. */
+  scopes?: string[];
+  [key: string]: unknown;
+}
+
+/** The kinds of deliverability signal {@link Misc.ingestDeliverabilityEvent} accepts. */
+export type DeliverabilityEventType = string;
+
+/**
+ * Body for {@link Misc.ingestDeliverabilityEvent}: one bounce, complaint, or similar
+ * signal from a downstream pipeline (an SES bounce processor, for example).
+ */
+export interface DeliverabilityEventParams {
+  event_type: DeliverabilityEventType;
+  recipient_email: string;
+  campaign_id?: string;
+  task_id?: string;
+  contact_id?: string;
+  provider?: string;
+  reason?: string;
+  /** Deduplicates repeated deliveries of the same upstream signal. */
+  idempotency_key?: string;
+  metadata?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+/** A send task that exhausted its retries and landed in the dead-letter queue. */
+export interface TaskDeadLetter {
+  id: string;
+  [key: string]: unknown;
+}
+
+/** Query params for {@link Misc.deadLetters}. */
+export interface ListDeadLettersParams {
+  status?: string;
+  /** Max rows, 1..200 (default 100). */
+  limit?: number;
+  [key: string]: unknown;
+}
+
+/**
+ * Small standalone resources grouped together: caller identity, folders, tags,
+ * categories, teams, audit logs, outreach settings, deliverability ingestion, the task
+ * dead-letter queue, warmup routing, plans, and timezones.
  *
  * @example
+ * const me = await warmbly.misc.me();
  * const folder = await warmbly.misc.createFolder({ title: "Prospects" });
  * const logs = await warmbly.misc.auditLogs();
  */
 export class Misc extends APIResource {
+  // --- Identity ---
+
+  /**
+   * Returns who the active credential belongs to, plus the scopes it was granted. Needs
+   * no specific permission, so any valid API key, OAuth token, or session can call it —
+   * which makes it the right way to validate a connection. Unlike `/auth/me` (JWT only),
+   * it is reachable with an API key.
+   *
+   * @example
+   * const me = await warmbly.misc.me();
+   * console.log(`${me.email} @ ${me.organization_name} (${me.auth_type})`);
+   */
+  me(opts?: RequestOptions): Promise<Identity> {
+    return this.http.get<Identity>("me", opts);
+  }
+
   // --- Folders ---
   // The API exposes create/update/delete for folders, tags, and categories; there is no
   // list endpoint for any of the three (they are read through their owning resources).
@@ -182,6 +255,52 @@ export class Misc extends APIResource {
    */
   updateOutreachSettings(params: Record<string, unknown>): Promise<Record<string, unknown>> {
     return this.http.patch<Record<string, unknown>>("outreach/settings", { body: params });
+  }
+
+  // --- Deliverability ingestion ---
+
+  /**
+   * Posts one deliverability signal (a bounce, a complaint, …) into the organization's
+   * reputation data. API-key callable, so a downstream pipeline such as an SES bounce
+   * processor can report without a human in the loop. Returns `202 Accepted` with no
+   * body. Pass `idempotency_key` when the upstream may redeliver.
+   *
+   * @example
+   * await warmbly.misc.ingestDeliverabilityEvent({
+   *   event_type: "bounce",
+   *   recipient_email: "jordan@acme.com",
+   *   provider: "ses",
+   *   reason: "550 mailbox not found",
+   * });
+   */
+  ingestDeliverabilityEvent(params: DeliverabilityEventParams): Promise<void> {
+    return this.http.post<void>("deliverability/events", { body: params });
+  }
+
+  // --- Task dead-letter queue ---
+
+  /**
+   * Lists send tasks that exhausted their retries. Requires `SEND_CAMPAIGNS`, because a
+   * replay re-dispatches real mail.
+   *
+   * @example
+   * const stuck = await warmbly.misc.deadLetters({ limit: 50 });
+   */
+  deadLetters(params?: ListDeadLettersParams): Promise<TaskDeadLetter[]> {
+    return this.http
+      .get<{ data: TaskDeadLetter[] }>("tasks/dlq", { query: params })
+      .then((r) => r.data ?? []);
+  }
+
+  /**
+   * Re-dispatches one dead-lettered task. This sends real mail.
+   * @example
+   * await warmbly.misc.replayDeadLetter("dl_1");
+   */
+  replayDeadLetter(id: string, params?: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this.http.post<Record<string, unknown>>(this.path("tasks", "dlq", id, "replay"), {
+      body: params,
+    });
   }
 
   // --- Warmup routing ---

@@ -3,7 +3,7 @@ import { resolveClientOptions } from "../core/config";
 import { BadRequestError } from "../core/errors";
 import { HttpClient } from "../core/http";
 import type { FetchLike } from "../core/types";
-import { Webhooks } from "./webhooks";
+import { WEBHOOK_EVENTS, WEBHOOK_FIREHOSE_EVENTS, Webhooks } from "./webhooks";
 
 function clientWith(
   body: unknown,
@@ -199,5 +199,34 @@ describe("Webhooks", () => {
     await expect(new Webhooks(http).deliveries({ limit: 9999 })).rejects.toBeInstanceOf(
       BadRequestError,
     );
+  });
+});
+
+describe("WEBHOOK_EVENTS catalog", () => {
+  it("has no duplicates", () => {
+    expect(new Set(WEBHOOK_EVENTS).size).toBe(WEBHOOK_EVENTS.length);
+  });
+
+  it("covers the documented families", () => {
+    const names: readonly string[] = WEBHOOK_EVENTS;
+    expect(names).toContain("campaign.reply_received");
+    expect(names).toContain("inbox.reply_received");
+    expect(names).toContain("warmup.blocked");
+    expect(names).toContain("deliverability.bounce");
+    expect(names).toContain("meeting.booked");
+    expect(names).toContain("crm.deal_created");
+    expect(names).toContain("lead_sync_source.updated");
+    expect(names).toContain("custom.event");
+    expect(names).toContain("webhook.test");
+  });
+
+  it("lists the firehose events as a subset of the catalog", () => {
+    const names: readonly string[] = WEBHOOK_EVENTS;
+    for (const event of WEBHOOK_FIREHOSE_EVENTS) {
+      expect(names).toContain(event);
+    }
+    // These are opt-in only, so they are exactly the high-volume per-message events.
+    expect(WEBHOOK_FIREHOSE_EVENTS).toContain("campaign.email_opened");
+    expect(WEBHOOK_FIREHOSE_EVENTS).not.toContain("campaign.reply_received");
   });
 });

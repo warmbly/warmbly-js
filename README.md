@@ -92,13 +92,43 @@ Resources hang off the client and mirror the API surface:
 | `warmbly.campaigns` | Campaigns, sequence steps, A/B variants, attachments, lifecycle |
 | `warmbly.contacts` | Contacts, search, import/export, notes, timeline, activities |
 | `warmbly.emails` | Email accounts (mailboxes), warmup controls, sending |
-| `warmbly.unibox` | Unified inbox: threads, replies, labels, snoozes |
+| `warmbly.unibox` | Unified inbox: threads, replies, compose, drafts, labels, snoozes |
 | `warmbly.analytics` | Dashboard, deliverability, warmup, and campaign analytics |
+| `warmbly.advisor` | Recommendations about your sending posture, and the fixes for them |
+| `warmbly.generation` | AI writing: compose, rewrite a selection, preview AI variables |
+| `warmbly.aiSkills` | Organization playbooks every AI surface follows |
 | `warmbly.templates` | Reply templates: render, score, duplicate |
 | `warmbly.crm` | Pipelines, deals, task types, tasks |
+| `warmbly.meetings` | Booked calls from Calendly and Cal.com, plus manual entries |
 | `warmbly.integrations` | Third-party connections, events, field mappings |
+| `warmbly.automations` | The visual flow builder: trigger events plus action steps |
+| `warmbly.leadSync` | On-demand Google Sheets to contacts sync |
 | `warmbly.webhooks` | Webhook endpoints, deliveries, event types |
-| `warmbly.misc` | Folders, tags, categories, teams, audit logs, plans, timezones |
+| `warmbly.misc` | Caller identity, folders, tags, categories, teams, audit logs, deliverability ingestion, the task DLQ, plans, timezones |
+
+Validate a credential and find out who it belongs to with `warmbly.misc.me()` — it needs no
+particular scope, so it works with any API key, OAuth token, or session:
+
+```ts
+const me = await warmbly.misc.me();
+console.log(`${me.email} @ ${me.organization_name} (${me.auth_type})`, me.scopes);
+```
+
+### AI features
+
+The AI endpoints charge credits and report what each call actually cost, settled against real
+token usage rather than a flat label. Drafting never sends — you decide what to do with the text.
+
+```ts
+// Draft a reply grounded in the thread, the contact, and your voice profile.
+const draft = await warmbly.unibox.replyDraft({ thread_id: "t_1" });
+if (draft.text) await warmbly.unibox.reply({ thread_id: "t_1", body: draft.text });
+console.log(draft.credits_charged, draft.model);
+
+// Compose drafting may ask a clarifying question instead of inventing a pitch.
+const composed = await warmbly.unibox.composeDraft({ to: "jordan@acme.com" });
+if (composed.question) console.log("needs an answer first:", composed.question);
+```
 
 ### Pagination
 
@@ -241,6 +271,8 @@ const gw = warmbly.gateway({
 gw.on("EMAIL_OPENED", (e) => console.log("opened", e.campaign_id));
 gw.on("EMAIL_REPLIED", (e) => console.log("reply", e.thread_id));
 gw.on("CUSTOM_EVENT", (e) => console.log(e.name, e.payload));
+gw.on("AI_DRAFT_READY", (e) => console.log("draft awaiting review", e.draft_id));
+gw.on("BILLING_CREDITS_LOW", (e) => console.log("credits low", e.balance, e.threshold));
 
 // Lifecycle
 gw.on("hello", (h) => console.log("connected at seq", h.seq));
@@ -252,7 +284,7 @@ await gw.connect();
 gw.close();
 ```
 
-**Intents** are event families (`EMAIL`, `CAMPAIGN`, `AUDIT`, `CUSTOM`, and more) that narrow the stream so you only receive and pay the rate budget for what you act on. **Channels** beyond the org stream are joinable too: `gw.joinCampaign(id)`, `gw.joinAccount(id)`, `gw.joinBulk(id)`.
+**Intents** are event families (`EMAIL`, `CAMPAIGN`, `AUDIT`, `CUSTOM`, `AI`, `BILLING`, and more) that narrow the stream so you only receive and pay the rate budget for what you act on. **Channels** beyond the org stream are joinable too: `gw.joinCampaign(id)`, `gw.joinAccount(id)`, `gw.joinBulk(id)`.
 
 To connect, the token must be an API key with the `REALTIME_SUBSCRIBE` permission, or an OAuth access token with the `realtime_subscribe` scope. The client inherits the token from the `Warmbly` client automatically.
 
@@ -274,7 +306,36 @@ Permissions.readOnly();      // the read_only preset
 Permissions.fullAccess();    // the full_access preset
 ```
 
+An OAuth client with no credentials yet can self-register (RFC 7591 dynamic client
+registration). Registration mints only a `client_id` and grants nothing on its own — a human
+still approves scopes at consent:
+
+```ts
+import { OAuthClient } from "warmbly";
+
+const client = await OAuthClient.register({
+  client_name: "My MCP client",
+  redirect_uris: ["http://127.0.0.1:8976/callback"],
+  token_endpoint_auth_method: "none", // public client; PKCE is then mandatory
+});
+const oauth = new OAuthClient({ clientId: client.client_id });
+```
+
 ## Verifying webhooks
+
+Every event Warmbly can deliver is exported as `WEBHOOK_EVENTS`, with the high-volume
+per-message events (opens, clicks, sends) listed separately in `WEBHOOK_FIREHOSE_EVENTS`.
+Those are opt-in: an endpoint with an empty `event_types` filter receives everything else,
+so a catch-all endpoint isn't buried under per-open traffic.
+
+```ts
+import { WEBHOOK_EVENTS, type WebhookEventName } from "warmbly";
+
+await warmbly.webhooks.create({
+  url: "https://hooks.example.com/warmbly",
+  event_types: ["campaign.reply_received", "meeting.booked"] satisfies WebhookEventName[],
+});
+```
 
 If your integration receives webhooks, verify the signature before trusting the payload. Works in any runtime with Web Crypto.
 
