@@ -113,6 +113,24 @@ export class OAuthApplications {
   }
 
   /**
+   * Uploads an application logo (PNG or JPEG, up to 2 MB) and returns its public URL.
+   *
+   * It lives outside `/applications/:id` on purpose, so the registration UI can upload a
+   * logo during the branding step before an app id exists. Pass the returned `logo_url`
+   * in the subsequent {@link OAuthApplications.create} or {@link OAuthApplications.update}
+   * payload.
+   *
+   * @example
+   * const { logo_url } = await warmbly.oauthApplications.uploadLogo(file, "logo.png");
+   * const app = await warmbly.oauthApplications.create({ name: "My App", logo_url });
+   */
+  async uploadLogo(file: Blob, filename?: string): Promise<{ logo_url: string }> {
+    const form = new FormData();
+    form.append("file", file, filename);
+    return this.http.post<{ logo_url: string }>("/oauth/application-logo", { body: form });
+  }
+
+  /**
    * Returns the application's webhook signing secret.
    *
    * @example

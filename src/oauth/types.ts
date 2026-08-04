@@ -160,6 +160,51 @@ export interface DiscoveryMetadata {
 }
 
 /**
+ * Client metadata for dynamic client registration (RFC 7591). Registration mints only a
+ * `client_id` and grants no access on its own: a human still approves scopes at consent.
+ *
+ * @example
+ * const client: DynamicClientRegistration = {
+ *   client_name: "My MCP client",
+ *   redirect_uris: ["http://127.0.0.1:8976/callback"],
+ *   token_endpoint_auth_method: "none",
+ * };
+ */
+export interface DynamicClientRegistration {
+  /** The human-readable name shown on the consent screen. */
+  client_name?: string;
+  /** Allowed redirect URIs. Executable schemes are rejected on this open endpoint. */
+  redirect_uris?: string[];
+  grant_types?: string[];
+  response_types?: string[];
+  /** `"none"` registers a public (PKCE, no-secret) client. Anything else is confidential. */
+  token_endpoint_auth_method?: "none" | "client_secret_basic" | "client_secret_post" | string;
+  /** Space-separated scopes to request. Capped server-side, then narrowed by the human. */
+  scope?: string;
+  client_uri?: string;
+  logo_uri?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * The RFC 7591 client-information response. `client_secret` is present only for a
+ * confidential registration (`token_endpoint_auth_method` other than `"none"`).
+ */
+export interface RegisteredClient {
+  client_id: string;
+  client_secret?: string;
+  /** Issue time, in seconds since the Unix epoch. */
+  client_id_issued_at?: number;
+  client_name?: string;
+  redirect_uris?: string[];
+  grant_types?: string[];
+  response_types?: string[];
+  token_endpoint_auth_method?: string;
+  scope?: string;
+  [key: string]: unknown;
+}
+
+/**
  * An OAuth application as returned by the management API (read shape).
  *
  * @example

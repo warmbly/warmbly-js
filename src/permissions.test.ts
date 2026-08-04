@@ -32,6 +32,8 @@ describe("permission bits", () => {
     expect(PERMISSIONS.READ_AUDIT_LOGS).toBe(524288);
     expect(PERMISSIONS.INTEGRATIONS).toBe(1048576);
     expect(PERMISSIONS.WARMUP_ROUTING).toBe(2097152);
+    expect(PERMISSIONS.AI_AGENT).toBe(4194304);
+    expect(PERMISSIONS.AI_RESEARCH).toBe(8388608);
   });
 
   it("uses unique single-bit values", () => {
@@ -44,7 +46,7 @@ describe("permission bits", () => {
 
   it("compute presets that match the server", () => {
     expect(PERMISSION_PRESETS.read_only).toBe(688159);
-    expect(PERMISSION_PRESETS.full_access).toBe(4194303);
+    expect(PERMISSION_PRESETS.full_access).toBe(16777215);
   });
 
   it("read_only is exactly the read bits", () => {
@@ -99,6 +101,8 @@ describe("permissionCategory", () => {
     expect(permissionCategory("API_KEYS")).toBe("special");
     expect(permissionCategory("INTEGRATIONS")).toBe("special");
     expect(permissionCategory("WARMUP_ROUTING")).toBe("special");
+    expect(permissionCategory("AI_AGENT")).toBe("special");
+    expect(permissionCategory("AI_RESEARCH")).toBe("special");
   });
 });
 
@@ -107,6 +111,8 @@ describe("permissionToScope", () => {
     expect(permissionToScope("READ_CAMPAIGNS")).toBe("read_campaigns");
     expect(permissionToScope("WRITE_CONTACTS")).toBe("write_contacts");
     expect(permissionToScope("WARMUP_ROUTING")).toBe("warmup_routing");
+    expect(permissionToScope("AI_AGENT")).toBe("ai_agent");
+    expect(permissionToScope("AI_RESEARCH")).toBe("ai_research");
   });
 });
 
@@ -161,7 +167,7 @@ describe("Permissions presets", () => {
 
   it("fullAccess matches the preset", () => {
     expect(Permissions.fullAccess().value).toBe(PERMISSION_PRESETS.full_access);
-    expect(Permissions.fullAccess().value).toBe(4194303);
+    expect(Permissions.fullAccess().value).toBe(16777215);
   });
 
   it("default constructor is empty", () => {

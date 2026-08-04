@@ -22,4 +22,12 @@ describe("WARMBLY_EVENTS", () => {
     expect(names).toContain("NOTIFICATION_CREATED");
     expect(names).toContain("CUSTOM_EVENT");
   });
+
+  it("includes the AI and billing event families", () => {
+    const names = Object.keys(WARMBLY_EVENTS);
+    expect(names).toContain("AI_DRAFT_READY");
+    expect(names).toContain("AI_RESEARCH_PROGRESS");
+    expect(names).toContain("BILLING_CREDITS_LOW");
+    expect(names).toContain("BILLING_CREDITS_CHANGED");
+  });
 });

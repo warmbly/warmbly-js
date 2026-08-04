@@ -15,7 +15,9 @@ import type {
   AuthorizationUrl,
   AuthorizationUrlParams,
   DiscoveryMetadata,
+  DynamicClientRegistration,
   OAuthClientOptions,
+  RegisteredClient,
   ScopeInput,
   TokenResponse,
   TokenSet,
@@ -223,6 +225,55 @@ export class OAuthClient {
     }
     this.discoveryCache = json;
     return json;
+  }
+
+  /**
+   * Self-registers an OAuth client (RFC 7591 dynamic client registration). Static,
+   * because the caller has no credentials yet — that is the point of the endpoint. It is
+   * open and per-IP rate-limited, and mints only a `client_id`: no access is granted
+   * until a human approves scopes at consent.
+   *
+   * Pass `token_endpoint_auth_method: "none"` for a public client, which is what MCP
+   * clients use; PKCE is then mandatory on the authorization flow.
+   *
+   * @example
+   * const client = await OAuthClient.register({
+   *   client_name: "My MCP client",
+   *   redirect_uris: ["http://127.0.0.1:8976/callback"],
+   *   token_endpoint_auth_method: "none",
+   * });
+   * const oauth = new OAuthClient({ clientId: client.client_id });
+   */
+  static async register(
+    metadata: DynamicClientRegistration,
+    options: { baseUrl?: string; fetch?: FetchLike } = {},
+  ): Promise<RegisteredClient> {
+    const baseUrl = stripTrailingSlash(options.baseUrl ?? DEFAULT_API_BASE_URL);
+    const fetchImpl = resolveFetch(options.fetch);
+    let response: Response;
+    try {
+      response = await fetchImpl(joinUrl(baseUrl, "/oauth/register"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(metadata),
+      });
+    } catch (cause) {
+      throw new WarmblyConnectionError("Network request to the Warmbly OAuth endpoint failed.", {
+        cause,
+      });
+    }
+
+    const json = (await response.json().catch(() => undefined)) as
+      | Record<string, unknown>
+      | undefined;
+
+    if (!response.ok || !json) {
+      const error = typeof json?.error === "string" ? json.error : "server_error";
+      const description =
+        typeof json?.error_description === "string" ? json.error_description : undefined;
+      throw new OAuthError(error, { description, status: response.status });
+    }
+    return json as unknown as RegisteredClient;
   }
 
   /** Posts to the token endpoint and parses the snake_case token response. */
