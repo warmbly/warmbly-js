@@ -35,6 +35,12 @@ export const GatewayIntents = {
   NOTIFICATION: "NOTIFICATION",
   /** Custom integration events (`CUSTOM_EVENT`). */
   CUSTOM: "CUSTOM",
+  /** AI events (`AI_DRAFT_READY`, `AI_RESEARCH_PROGRESS`). */
+  AI: "AI",
+  /** AI contact-research progress (`AI_RESEARCH_PROGRESS`). */
+  RESEARCH: "RESEARCH",
+  /** Billing and AI-credit events (`BILLING_CREDITS_LOW`, `BILLING_CREDITS_CHANGED`). */
+  BILLING: "BILLING",
 } as const;
 
 /** A known intent family name. */

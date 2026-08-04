@@ -404,3 +404,82 @@ describe("discover", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(3);
   });
 });
+
+describe("OAuthClient.register", () => {
+  it("POSTs JSON client metadata to /oauth/register and returns the client info", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse(201, {
+        client_id: "wmcid_new",
+        client_id_issued_at: 1770000000,
+        redirect_uris: ["http://127.0.0.1:8976/callback"],
+        token_endpoint_auth_method: "none",
+      }),
+    );
+    const client = await OAuthClient.register(
+      {
+        client_name: "My MCP client",
+        redirect_uris: ["http://127.0.0.1:8976/callback"],
+        token_endpoint_auth_method: "none",
+      },
+      { fetch: fetchImpl as unknown as typeof fetch },
+    );
+
+    expect(client.client_id).toBe("wmcid_new");
+    // A public client gets no secret; PKCE is the protection instead.
+    expect(client.client_secret).toBeUndefined();
+
+    const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(String(url)).toContain("/oauth/register");
+    expect(init.method).toBe("POST");
+    expect((init.headers as Record<string, string>)["Content-Type"]).toBe("application/json");
+    expect(JSON.parse(String(init.body))).toEqual({
+      client_name: "My MCP client",
+      redirect_uris: ["http://127.0.0.1:8976/callback"],
+      token_endpoint_auth_method: "none",
+    });
+  });
+
+  it("honors a custom baseUrl", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(201, { client_id: "wmcid_new" }));
+    await OAuthClient.register(
+      { client_name: "x" },
+      {
+        baseUrl: "https://api.staging.warmbly.com/v1/",
+        fetch: fetchImpl as unknown as typeof fetch,
+      },
+    );
+    const [url] = fetchImpl.mock.calls[0] as unknown as [string];
+    expect(String(url)).toBe("https://api.staging.warmbly.com/v1/oauth/register");
+  });
+
+  it("throws an OAuthError carrying the RFC 7591 error code", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse(400, {
+        error: "invalid_redirect_uri",
+        error_description: "executable scheme",
+      }),
+    );
+    const err = await OAuthClient.register(
+      { redirect_uris: ["myapp://cb"] },
+      { fetch: fetchImpl as unknown as typeof fetch },
+    ).catch((e) => e);
+
+    expect(err).toBeInstanceOf(OAuthError);
+    expect((err as OAuthError).error).toBe("invalid_redirect_uri");
+    expect((err as OAuthError).errorDescription).toBe("executable scheme");
+    expect((err as OAuthError).status).toBe(400);
+  });
+
+  it("does not retry, so a transient failure cannot double-register a client", async () => {
+    const fetchImpl = vi.fn(async () => {
+      throw new Error("socket hang up");
+    });
+    const err = await OAuthClient.register(
+      { client_name: "x" },
+      { fetch: fetchImpl as unknown as typeof fetch },
+    ).catch((e) => e);
+
+    expect(err).toBeInstanceOf(WarmblyConnectionError);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+});

@@ -315,3 +315,66 @@ describe("Misc plans and timezones", () => {
     expect(url).toContain("/timezones");
   });
 });
+
+describe("Misc identity", () => {
+  it("me() GETs /me and reports the credential's auth type and scopes", async () => {
+    const { http, fetchMock } = clientWith({
+      user_id: "u_1",
+      email: "ops@warmbly.com",
+      organization_id: "org_1",
+      organization_name: "Warmbly",
+      auth_type: "api_key",
+      scopes: ["read_campaigns"],
+    });
+    const me = await new Misc(http).me();
+    expect(me.auth_type).toBe("api_key");
+    expect(me.scopes).toEqual(["read_campaigns"]);
+
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("GET");
+    expect(url).toContain("/me");
+  });
+});
+
+describe("Misc deliverability and DLQ", () => {
+  it("ingestDeliverabilityEvent() POSTs the event body", async () => {
+    const { http, fetchMock } = clientWith(undefined, { status: 202 });
+    await new Misc(http).ingestDeliverabilityEvent({
+      event_type: "bounce",
+      recipient_email: "jordan@acme.com",
+      reason: "550 mailbox not found",
+    });
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("POST");
+    expect(url).toContain("/deliverability/events");
+    expect(JSON.parse(String(init.body))).toEqual({
+      event_type: "bounce",
+      recipient_email: "jordan@acme.com",
+      reason: "550 mailbox not found",
+    });
+  });
+
+  it("deadLetters() unwraps the data envelope and forwards filters", async () => {
+    const { http, fetchMock } = clientWith({ data: [{ id: "dl_1" }] });
+    const items = await new Misc(http).deadLetters({ status: "failed", limit: 50 });
+    expect(items.map((i) => i.id)).toEqual(["dl_1"]);
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("GET");
+    expect(url).toContain("/tasks/dlq");
+    expect(url).toContain("status=failed");
+    expect(url).toContain("limit=50");
+  });
+
+  it("deadLetters() returns an empty array when the envelope has no data", async () => {
+    const { http } = clientWith({});
+    await expect(new Misc(http).deadLetters()).resolves.toEqual([]);
+  });
+
+  it("replayDeadLetter() POSTs the replay path", async () => {
+    const { http, fetchMock } = clientWith({ replayed: true });
+    await new Misc(http).replayDeadLetter("dl_1");
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("POST");
+    expect(url).toContain("/tasks/dlq/dl_1/replay");
+  });
+});

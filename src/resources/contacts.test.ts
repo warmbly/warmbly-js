@@ -312,4 +312,60 @@ describe("Contacts", () => {
     expect(init.method).toBe("DELETE");
     expect(url).toContain("/contacts/c1/notes/n1");
   });
+  it("customFields() unwraps the flat data array", async () => {
+    const { http, fetchMock } = clientWithSequence([
+      { body: { data: ["industry", "seat_count"] } },
+    ]);
+    const keys = await new Contacts(http).customFields();
+    expect(keys).toEqual(["industry", "seat_count"]);
+    const { url, init } = callAt(fetchMock, 0);
+    expect(init.method).toBe("GET");
+    expect(url).toContain("/contacts/custom-fields");
+  });
+
+  it("customFields() returns an empty array when the envelope has no data", async () => {
+    const { http } = clientWithSequence([{ body: {} }]);
+    await expect(new Contacts(http).customFields()).resolves.toEqual([]);
+  });
+
+  it("research() POSTs the per-contact run and returns its cited result", async () => {
+    const { http, fetchMock } = clientWithSequence([
+      {
+        body: {
+          id: "run_1",
+          contact_id: "c_1",
+          status: "succeeded",
+          credits_charged: 2,
+          result: { signals: [{ fact: "Raised a Series A", url: "https://example.com" }] },
+        },
+      },
+    ]);
+    const run = await new Contacts(http).research("c_1", { objective: "funding signals" });
+    expect(run.status).toBe("succeeded");
+    expect(run.result?.signals?.[0]?.url).toBe("https://example.com");
+
+    const { url, init } = callAt(fetchMock, 0);
+    expect(init.method).toBe("POST");
+    expect(url).toContain("/contacts/c_1/research");
+    expect(JSON.parse(String(init.body))).toEqual({ objective: "funding signals" });
+  });
+
+  it("listResearch() unwraps the data envelope", async () => {
+    const { http, fetchMock } = clientWithSequence([{ body: { data: [{ id: "run_1" }] } }]);
+    const runs = await new Contacts(http).listResearch("c_1");
+    expect(runs.map((r) => r.id)).toEqual(["run_1"]);
+    const { url, init } = callAt(fetchMock, 0);
+    expect(init.method).toBe("GET");
+    expect(url).toContain("/contacts/c_1/research");
+  });
+
+  it("researchBatch() POSTs the batch path and reports how many queued", async () => {
+    const { http, fetchMock } = clientWithSequence([{ body: { queued: 2 } }]);
+    const result = await new Contacts(http).researchBatch({ contact_ids: ["c_1", "c_2"] });
+    expect(result.queued).toBe(2);
+    const { url, init } = callAt(fetchMock, 0);
+    expect(init.method).toBe("POST");
+    expect(url).toContain("/contacts/research/batch");
+    expect(JSON.parse(String(init.body))).toEqual({ contact_ids: ["c_1", "c_2"] });
+  });
 });

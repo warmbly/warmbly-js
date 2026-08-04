@@ -8,13 +8,19 @@ import { WS_READY_STATE } from "./gateway/types";
 import { OAuthApplications } from "./oauth/applications";
 import { OAuthClient } from "./oauth/oauth";
 import {
+  Advisor,
+  AISkills,
   Analytics,
   ApiKeys,
+  Automations,
   Campaigns,
   Contacts,
   Crm,
   Emails,
+  Generation,
   Integrations,
+  LeadSync,
+  Meetings,
   Misc,
   Templates,
   Unibox,
@@ -151,9 +157,15 @@ describe("Warmbly construction", () => {
     expect(warmbly.emails).toBeInstanceOf(Emails);
     expect(warmbly.unibox).toBeInstanceOf(Unibox);
     expect(warmbly.analytics).toBeInstanceOf(Analytics);
+    expect(warmbly.advisor).toBeInstanceOf(Advisor);
+    expect(warmbly.generation).toBeInstanceOf(Generation);
+    expect(warmbly.aiSkills).toBeInstanceOf(AISkills);
     expect(warmbly.templates).toBeInstanceOf(Templates);
     expect(warmbly.crm).toBeInstanceOf(Crm);
+    expect(warmbly.meetings).toBeInstanceOf(Meetings);
     expect(warmbly.integrations).toBeInstanceOf(Integrations);
+    expect(warmbly.automations).toBeInstanceOf(Automations);
+    expect(warmbly.leadSync).toBeInstanceOf(LeadSync);
     expect(warmbly.webhooks).toBeInstanceOf(Webhooks);
     expect(warmbly.misc).toBeInstanceOf(Misc);
     expect(warmbly.oauthApplications).toBeInstanceOf(OAuthApplications);

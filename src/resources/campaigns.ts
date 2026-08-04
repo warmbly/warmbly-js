@@ -59,6 +59,20 @@ export interface ListCampaignsParams {
   [key: string]: unknown;
 }
 
+/** One sequence step's canvas coordinates. */
+export interface StepPosition {
+  /** The step's id. */
+  id: string;
+  x: number;
+  y: number;
+}
+
+/** Body for {@link Campaigns.setStepLayout}: a position-only update, max 1000 entries. */
+export interface StepLayoutParams {
+  positions: StepPosition[];
+  [key: string]: unknown;
+}
+
 /**
  * Manage campaigns and their steps, variants, attachments, senders, and lifecycle.
  * Reachable as `warmbly.campaigns`.
@@ -75,6 +89,18 @@ export class Campaigns extends APIResource {
    */
   list(params?: ListCampaignsParams): Promise<Page<Campaign>> {
     return this.http.getPage<Campaign>("campaigns", { query: params });
+  }
+
+  /**
+   * Returns the status-bucket and folder counts behind the campaigns browser. Lives at
+   * the top level (`/campaigns-overview`) rather than under `/campaigns`, because it
+   * takes no campaign id.
+   *
+   * @example
+   * const overview = await warmbly.campaigns.overview();
+   */
+  overview(params?: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this.http.get<Record<string, unknown>>("campaigns-overview", { query: params });
   }
 
   /**
@@ -337,5 +363,38 @@ export class Campaigns extends APIResource {
    */
   deleteStep(id: string, stepId: string, opts?: RequestOptions): Promise<void> {
     return this.http.delete<void>(this.path("campaigns", id, "steps", stepId), opts);
+  }
+
+  /**
+   * Persists the canvas coordinates of sequence steps without touching their content.
+   * Positions are last-write-wins, so retries are safe and no `Idempotency-Key` is
+   * needed. Up to 1000 positions per call.
+   *
+   * @example
+   * await warmbly.campaigns.setStepLayout("camp_1", {
+   *   positions: [{ id: "step_1", x: 120, y: 40 }],
+   * });
+   */
+  setStepLayout(id: string, params: StepLayoutParams): Promise<{ ok: boolean }> {
+    return this.http.patch<{ ok: boolean }>(this.path("campaigns", id, "step-layout"), {
+      body: params,
+    });
+  }
+
+  /**
+   * Re-checks the DNS records behind the campaign's custom tracking domain and returns
+   * its verification status.
+   *
+   * @example
+   * const status = await warmbly.campaigns.verifyTrackingDomain("camp_1");
+   */
+  verifyTrackingDomain(
+    id: string,
+    params?: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    return this.http.post<Record<string, unknown>>(
+      this.path("campaigns", id, "tracking-domain", "verify"),
+      { body: params },
+    );
   }
 }
