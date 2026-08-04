@@ -335,4 +335,33 @@ describe("Campaigns", () => {
     const { http } = clientWith({ code: "not_found", message: "missing" }, { status: 404 });
     await expect(new Campaigns(http).get("missing")).rejects.toBeInstanceOf(NotFoundError);
   });
+  it("overview() GETs the top-level campaigns-overview path", async () => {
+    const { http, fetchMock } = clientWith({ active: 3, draft: 1 });
+    const overview = await new Campaigns(http).overview();
+    expect(overview).toEqual({ active: 3, draft: 1 });
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("GET");
+    expect(url).toContain("/campaigns-overview");
+    expect(url).not.toContain("/campaigns/");
+  });
+
+  it("setStepLayout() PATCHes the step-layout path with positions only", async () => {
+    const { http, fetchMock } = clientWith({ ok: true });
+    await new Campaigns(http).setStepLayout("c1", {
+      positions: [{ id: "s1", x: 120, y: 40 }],
+    });
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("PATCH");
+    expect(url).toContain("/campaigns/c1/step-layout");
+    expect(JSON.parse(String(init.body))).toEqual({ positions: [{ id: "s1", x: 120, y: 40 }] });
+  });
+
+  it("verifyTrackingDomain() POSTs the nested verify path", async () => {
+    const { http, fetchMock } = clientWith({ verified: true });
+    const status = await new Campaigns(http).verifyTrackingDomain("c1");
+    expect(status).toEqual({ verified: true });
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("POST");
+    expect(url).toContain("/campaigns/c1/tracking-domain/verify");
+  });
 });

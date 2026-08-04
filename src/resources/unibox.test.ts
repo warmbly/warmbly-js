@@ -206,4 +206,152 @@ describe("Unibox", () => {
     expect(init.method).toBe("DELETE");
     expect(url).toContain("/unibox/scheduled/task_1");
   });
+
+  it("list() forwards the address and direction filters", async () => {
+    const { http, fetchMock } = clientWith({
+      data: [],
+      pagination: { total: 0, next_cursor: null, has_more: false },
+    });
+    await new Unibox(http).list({ address: "jordan@acme.com", direction: "sent" });
+    const { url } = lastCall(fetchMock);
+    expect(url).toContain("address=jordan%40acme.com");
+    expect(url).toContain("direction=sent");
+  });
+
+  it("replyDraft() POSTs unibox/reply/draft and returns the draft with its cost", async () => {
+    const { http, fetchMock } = clientWith({
+      text: "Happy to help.",
+      credits_charged: 2,
+      tokens_used: 410,
+      model: "standard",
+    });
+    const draft = await new Unibox(http).replyDraft({ thread_id: "t_1", instruction: "be brief" });
+    expect(draft.text).toBe("Happy to help.");
+    expect(draft.credits_charged).toBe(2);
+
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("POST");
+    expect(url).toContain("/unibox/reply/draft");
+    expect(JSON.parse(String(init.body))).toEqual({ thread_id: "t_1", instruction: "be brief" });
+  });
+
+  it("composeCandidates() GETs unibox/compose/candidates with the recipient", async () => {
+    const { http, fetchMock } = clientWith({
+      accounts: [{ id: "mb_1", email: "sales@warmbly.com", score: 90, recommended: true }],
+      recommended_account_id: "mb_1",
+      recommended_reason: "already talks to this address",
+      contact: null,
+      suppression: null,
+    });
+    const result = await new Unibox(http).composeCandidates({ to: "jordan@acme.com" });
+    expect(result.accounts[0]?.id).toBe("mb_1");
+    expect(result.recommended_account_id).toBe("mb_1");
+
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("GET");
+    expect(url).toContain("/unibox/compose/candidates");
+    expect(url).toContain("to=jordan%40acme.com");
+  });
+
+  it("compose() POSTs unibox/compose and reports the auto-picked mailbox", async () => {
+    const { http, fetchMock } = clientWith({
+      task_id: "task_9",
+      account_id: "mb_1",
+      account_email: "sales@warmbly.com",
+      auto: true,
+      picked_reason: "most budget left today",
+    });
+    const sent = await new Unibox(http).compose({
+      to: ["jordan@acme.com"],
+      subject: "Quick question",
+      body_plain: "Hi Jordan",
+    });
+    expect(sent.auto).toBe(true);
+    expect(sent.picked_reason).toBe("most budget left today");
+
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("POST");
+    expect(url).toContain("/unibox/compose");
+    expect(JSON.parse(String(init.body))).toEqual({
+      to: ["jordan@acme.com"],
+      subject: "Quick question",
+      body_plain: "Hi Jordan",
+    });
+  });
+
+  it("composeDraft() POSTs unibox/compose/draft and can return a question instead of text", async () => {
+    const { http, fetchMock } = clientWith({
+      question: "What are you hoping to get out of the call?",
+      grounding: { contact: true, history: 3, voice_profile: false },
+      credits_charged: 2,
+    });
+    const draft = await new Unibox(http).composeDraft({ to: "jordan@acme.com" });
+    expect(draft.question).toBe("What are you hoping to get out of the call?");
+    expect(draft.text).toBeUndefined();
+    expect(draft.grounding?.history).toBe(3);
+
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("POST");
+    expect(url).toContain("/unibox/compose/draft");
+  });
+
+  it("listDrafts() unwraps the data envelope", async () => {
+    const { http, fetchMock } = clientWith({ data: [{ id: "d_1", subject: "Intro" }] });
+    const drafts = await new Unibox(http).listDrafts();
+    expect(drafts.map((d) => d.id)).toEqual(["d_1"]);
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("GET");
+    expect(url).toContain("/unibox/drafts");
+  });
+
+  it("listDrafts() returns an empty array when the envelope has no data", async () => {
+    const { http } = clientWith({});
+    await expect(new Unibox(http).listDrafts()).resolves.toEqual([]);
+  });
+
+  it("saveDraft() PUTs the client-generated id, which keeps autosave idempotent", async () => {
+    const { http, fetchMock } = clientWith({ id: "d_local_1" });
+    const saved = await new Unibox(http).saveDraft("d_local_1", { subject: "Intro", body: "Hi" });
+    expect(saved.id).toBe("d_local_1");
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("PUT");
+    expect(url).toContain("/unibox/drafts/d_local_1");
+    expect(JSON.parse(String(init.body))).toEqual({ subject: "Intro", body: "Hi" });
+  });
+
+  it("deleteDraft() DELETEs unibox/drafts/:id", async () => {
+    const { http, fetchMock } = clientWith({ deleted: true });
+    await expect(new Unibox(http).deleteDraft("d_1")).resolves.toEqual({ deleted: true });
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("DELETE");
+    expect(url).toContain("/unibox/drafts/d_1");
+  });
+
+  it("agentDrafts() unwraps the data envelope", async () => {
+    const { http, fetchMock } = clientWith({
+      data: [{ id: "ad_1", thread_id: "t_1", status: "pending" }],
+    });
+    const drafts = await new Unibox(http).agentDrafts();
+    expect(drafts.map((d) => d.status)).toEqual(["pending"]);
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("GET");
+    expect(url).toContain("/unibox/agent-drafts");
+  });
+
+  it("approveAgentDraft() POSTs the approve path with an optional edited body", async () => {
+    const { http, fetchMock } = clientWith({ sent: true });
+    await new Unibox(http).approveAgentDraft("ad_1", { body: "Tuesday works." });
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("POST");
+    expect(url).toContain("/unibox/agent-drafts/ad_1/approve");
+    expect(JSON.parse(String(init.body))).toEqual({ body: "Tuesday works." });
+  });
+
+  it("discardAgentDraft() POSTs the discard path", async () => {
+    const { http, fetchMock } = clientWith({ discarded: true });
+    await new Unibox(http).discardAgentDraft("ad_1");
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("POST");
+    expect(url).toContain("/unibox/agent-drafts/ad_1/discard");
+  });
 });

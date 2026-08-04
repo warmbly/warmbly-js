@@ -37,6 +37,20 @@ export interface SendEmailParams {
   [key: string]: unknown;
 }
 
+/**
+ * Body for {@link Emails.bulkTag}: add and/or remove tags across many mailboxes in one
+ * transaction. Set semantics, so re-adding an existing tag is a no-op.
+ */
+export interface BulkTagEmailsParams {
+  /** The mailboxes to retag, 1..1000 ids. */
+  email_ids: string[];
+  /** Tag ids to add, up to 100. */
+  add_tags?: string[];
+  /** Tag ids to remove, up to 100. */
+  remove_tags?: string[];
+  [key: string]: unknown;
+}
+
 /** Query params for updating a mailbox's tracking domain. */
 export interface TrackParams {
   /** The custom tracking domain to apply (sent as the `domain` query parameter). */
@@ -92,6 +106,23 @@ export class Emails extends APIResource {
    */
   delete(id: string, opts?: RequestOptions): Promise<void> {
     return this.http.delete<void>(this.path("emails", id), opts);
+  }
+
+  /**
+   * Adds and/or removes tags across up to 1000 mailboxes in one transaction. Set
+   * semantics make it naturally idempotent, so retries need no `Idempotency-Key`.
+   * Ids you don't own are skipped rather than erroring. Returns the number of
+   * mailboxes touched.
+   *
+   * @example
+   * const { updated } = await warmbly.emails.bulkTag({
+   *   email_ids: ["mb_1", "mb_2"],
+   *   add_tags: ["tag_outbound"],
+   *   remove_tags: ["tag_paused"],
+   * });
+   */
+  bulkTag(params: BulkTagEmailsParams): Promise<{ updated: number }> {
+    return this.http.patch<{ updated: number }>("emails/tags", { body: params });
   }
 
   /**
