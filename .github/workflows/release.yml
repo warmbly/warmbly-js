@@ -56,11 +56,17 @@ jobs:
           fi
 
       # A dispatch can target any commit on main, so re-verify rather than
-      # trusting whatever CI last ran.
+      # trusting whatever CI last ran. Same gate as ci.yml, plus the two package
+      # validations, which check exactly what is about to be published.
       - run: pnpm lint
       - run: pnpm typecheck
+      - run: pnpm typecheck:examples
       - run: pnpm test
       - run: pnpm build
+      - name: Validate publishable package (publint)
+        run: pnpm check:publish
+      - name: Validate type resolution (are the types wrong)
+        run: pnpm check:exports
 
       - name: Version packages
         run: pnpm version-packages
