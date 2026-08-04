@@ -88,10 +88,13 @@ jobs:
           git push origin HEAD:main
 
       # Publishing uses npm trusted publishing (OIDC, via id-token: write): no NPM
-      # token is needed and provenance is generated automatically. Configure the
-      # trusted publisher for this package on npmjs.com first (package Settings ->
-      # Trusted Publisher: this repo + workflow file release.yml + action npm publish).
-      # The package must already exist on npm, so bootstrap the first version once.
+      # token is needed and provenance is generated automatically.
+      #
+      # 0.1.0 was published by hand (npm 10.8.2, no attestations), so this repo has
+      # never actually published from CI. Before the first release, configure the
+      # trusted publisher on npmjs.com: package Settings -> Trusted Publisher ->
+      # this repo, workflow file `release.yml`. Without it npm rejects the publish
+      # for want of credentials, since no NPM_TOKEN is set here on purpose.
       - name: Publish to npm
         if: ${{ !inputs.dry_run }}
         run: pnpm release
