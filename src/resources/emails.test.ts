@@ -187,4 +187,31 @@ describe("Emails", () => {
       expect(result.message_id).toBe("m1");
     });
   });
+  describe("bulkTag", () => {
+    it("PATCHes emails/tags with the set-semantics body and returns the updated count", async () => {
+      const { http, fetchMock } = clientWith({ updated: 2 });
+      const result = await new Emails(http).bulkTag({
+        email_ids: ["mb1", "mb2"],
+        add_tags: ["tag_a"],
+        remove_tags: ["tag_b"],
+      });
+      const { url, init } = lastCall(fetchMock);
+      expect(init.method).toBe("PATCH");
+      expect(url).toContain("/emails/tags");
+      expect(JSON.parse(String(init.body))).toEqual({
+        email_ids: ["mb1", "mb2"],
+        add_tags: ["tag_a"],
+        remove_tags: ["tag_b"],
+      });
+      expect(result.updated).toBe(2);
+    });
+
+    it("does not collide with the /emails/:id route", async () => {
+      const { http, fetchMock } = clientWith({ updated: 0 });
+      await new Emails(http).bulkTag({ email_ids: ["mb1"] });
+      const { url } = lastCall(fetchMock);
+      expect(url).toContain("/emails/tags");
+      expect(url).not.toContain("/emails/tags/");
+    });
+  });
 });

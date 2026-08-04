@@ -33,6 +33,8 @@ export const PERMISSIONS = {
   READ_AUDIT_LOGS: 524288,
   INTEGRATIONS: 1048576,
   WARMUP_ROUTING: 2097152,
+  AI_AGENT: 4194304,
+  AI_RESEARCH: 8388608,
 } as const;
 
 /** A permission name, e.g. `"READ_CAMPAIGNS"`. */
@@ -70,6 +72,8 @@ const CATEGORY: Record<PermissionName, PermissionCategory> = {
   API_KEYS: "special",
   INTEGRATIONS: "special",
   WARMUP_ROUTING: "special",
+  AI_AGENT: "special",
+  AI_RESEARCH: "special",
 };
 
 const PERMISSION_NAMES = Object.keys(PERMISSIONS) as PermissionName[];

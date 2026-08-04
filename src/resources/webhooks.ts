@@ -43,11 +43,125 @@ export interface WebhookEventDelivery {
   [key: string]: unknown;
 }
 
+/**
+ * Every event Warmbly delivers to a webhook endpoint, as of this SDK release. Pass any
+ * subset as `event_types`; an empty list subscribes to everything except the firehose
+ * events in {@link WEBHOOK_FIREHOSE_EVENTS}, which are opt-in only.
+ *
+ * The live catalog — with descriptions and categories — is available at runtime via
+ * {@link Webhooks.eventTypes}.
+ */
+export const WEBHOOK_EVENTS = [
+  "email_account.connected",
+  "email_account.removed",
+  "email_account.disconnected",
+  "email_account.error",
+  "email_account.synced",
+  "email_account.health_changed",
+
+  "campaign.created",
+  "campaign.updated",
+  "campaign.deleted",
+  "campaign.started",
+  "campaign.paused",
+  "campaign.completed",
+  "campaign.action",
+  "campaign.deliverability_warning",
+  "campaign.email_sent",
+  "campaign.email_delivered",
+  "campaign.email_opened",
+  "campaign.email_clicked",
+  "campaign.email_bounced",
+  "campaign.reply_received",
+  "campaign.unsubscribed",
+
+  "warmup.email_sent",
+  "warmup.health_changed",
+  "warmup.placement_in_spam",
+  "warmup.quarantined",
+  "warmup.blocked",
+
+  "deliverability.bounce",
+  "deliverability.complaint",
+
+  "meeting.booked",
+  "meeting.rescheduled",
+  "meeting.canceled",
+
+  "inbound.webhook",
+
+  "inbox.email_received",
+  "inbox.email_updated",
+  "inbox.email_deleted",
+  "inbox.reply_received",
+
+  "contact.created",
+  "contact.updated",
+  "contact.deleted",
+
+  "bulk_operation.started",
+  "bulk_operation.completed",
+  "bulk_operation.failed",
+
+  "automation.created",
+  "automation.updated",
+  "automation.deleted",
+  "automation.run",
+
+  "template.created",
+  "template.updated",
+  "template.deleted",
+
+  "team.member_invited",
+  "team.member_removed",
+  "role.created",
+  "role.updated",
+  "role.deleted",
+
+  "crm.deal_created",
+  "crm.deal_updated",
+  "crm.deal_deleted",
+  "crm.task_created",
+  "crm.task_updated",
+  "crm.note_created",
+  "crm.pipeline_updated",
+
+  "lead_sync_source.updated",
+  "settings.updated",
+  "subscription.updated",
+
+  "custom.event",
+
+  /** Delivered only to the endpoint being verified or tested, never fanned out. */
+  "webhook.test",
+] as const;
+
+/** A known webhook event name, e.g. `"campaign.reply_received"`. */
+export type WebhookEventName = (typeof WEBHOOK_EVENTS)[number];
+
+/**
+ * High-volume, per-message events. They are excluded from the empty-filter "everything"
+ * subscription so a catch-all endpoint isn't buried under per-open/click traffic —
+ * list one explicitly in `event_types` to receive it.
+ */
+export const WEBHOOK_FIREHOSE_EVENTS = [
+  "campaign.email_sent",
+  "campaign.email_delivered",
+  "campaign.email_opened",
+  "campaign.email_clicked",
+  "warmup.email_sent",
+  "inbox.email_received",
+  "inbox.email_updated",
+  "inbox.email_deleted",
+  "email_account.synced",
+] as const satisfies readonly WebhookEventName[];
+
 /** An entry in the webhook event-type catalog. */
 export interface WebhookEventType {
-  type: string;
+  type: WebhookEventName | string;
   category?: string;
   description?: string;
+  /** Whether the event is opt-in-only high-volume traffic. */
   firehose?: boolean;
   [key: string]: unknown;
 }

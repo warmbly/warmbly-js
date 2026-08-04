@@ -134,6 +134,70 @@ export interface CustomEvent extends GatewayEventBase {
 }
 
 /**
+ * An AI contact-research run finished. Fires once per completed run, so a batch
+ * reports progress as it drains.
+ *
+ * @example
+ * gw.on("AI_RESEARCH_PROGRESS", (e) => console.log(e.contact_id, e.status));
+ */
+export interface AIResearchEvent extends GatewayEventBase {
+  event_type: "AI_RESEARCH_PROGRESS";
+  /** The organization the run belongs to. */
+  org_id?: string;
+  /** The contact that was researched. */
+  contact_id?: string;
+  /** The research run's id. */
+  run_id?: string;
+  /** The run's terminal status. */
+  status?: string;
+}
+
+/**
+ * The inbox agent persisted a reply draft awaiting human review. Gated on the
+ * `access_unibox` member permission, so only members who can see the inbox receive it.
+ *
+ * @example
+ * gw.on("AI_DRAFT_READY", (e) => refreshDrafts(e.thread_id));
+ */
+export interface AIDraftReadyEvent extends GatewayEventBase {
+  event_type: "AI_DRAFT_READY";
+  /** The organization the draft belongs to. */
+  org_id?: string;
+  /** The thread the draft replies to. */
+  thread_id?: string;
+  /** The agent draft's id, for `unibox.approveAgentDraft`. */
+  draft_id?: string;
+  /** The inbound email that triggered the draft. */
+  email_id?: string;
+}
+
+/**
+ * The organization's AI credit balance dropped under its alert threshold. Fired at
+ * most once a day per organization, and gated on the `manage_billing` permission.
+ */
+export interface CreditsLowEvent extends GatewayEventBase {
+  event_type: "BILLING_CREDITS_LOW";
+  /** The organization the balance belongs to. */
+  org_id?: string;
+  /** The spendable balance that tripped the alert. */
+  balance?: number;
+  /** The configured alert threshold. */
+  threshold?: number;
+}
+
+/**
+ * The organization's AI credit balance changed after a debit, so meters can count
+ * down live. Gated on the `manage_billing` permission.
+ */
+export interface CreditsChangedEvent extends GatewayEventBase {
+  event_type: "BILLING_CREDITS_CHANGED";
+  /** The organization the balance belongs to. */
+  org_id?: string;
+  /** The spendable balance after the debit. */
+  balance?: number;
+}
+
+/**
  * Maps every dispatchable gateway event name to its payload type. Use it to type
  * `gw.on(name, cb)` handlers.
  *
@@ -180,6 +244,12 @@ export interface WarmblyEventMap {
   AUTOMATION_RUN: AutomationEvent;
 
   AUDIT_CREATED: AuditEvent;
+
+  AI_RESEARCH_PROGRESS: AIResearchEvent;
+  AI_DRAFT_READY: AIDraftReadyEvent;
+
+  BILLING_CREDITS_LOW: CreditsLowEvent;
+  BILLING_CREDITS_CHANGED: CreditsChangedEvent;
 
   MEETING_BOOKED: MeetingEvent;
   MEETING_RESCHEDULED: MeetingEvent;
@@ -239,6 +309,12 @@ export const WARMBLY_EVENTS = {
   AUTOMATION_RUN: "AUTOMATION_RUN",
 
   AUDIT_CREATED: "AUDIT_CREATED",
+
+  AI_RESEARCH_PROGRESS: "AI_RESEARCH_PROGRESS",
+  AI_DRAFT_READY: "AI_DRAFT_READY",
+
+  BILLING_CREDITS_LOW: "BILLING_CREDITS_LOW",
+  BILLING_CREDITS_CHANGED: "BILLING_CREDITS_CHANGED",
 
   MEETING_BOOKED: "MEETING_BOOKED",
   MEETING_RESCHEDULED: "MEETING_RESCHEDULED",

@@ -38,10 +38,14 @@ WARMBLY_API_KEY=wmbly_... npx tsx examples/rest.ts
 | [`contacts.ts`](./contacts.ts) | Add, search, lookup, notes, timeline, bulk update, export |
 | [`mailboxes-warmup.ts`](./mailboxes-warmup.ts) | Email accounts, warmup controls, verification, sending |
 | [`unibox.ts`](./unibox.ts) | Unified inbox: threads, replies, labels, snoozes, scheduled |
+| [`compose-and-ai-drafts.ts`](./compose-and-ai-drafts.ts) | Mailbox scoring, composing new mail, AI drafts, autosave, the inbox agent queue |
 | [`analytics.ts`](./analytics.ts) | Dashboard, deliverability, warmup, and campaign analytics |
+| [`advisor.ts`](./advisor.ts) | Recommendations, previews, apply/undo, snooze/dismiss, feedback |
+| [`ai-generation.ts`](./ai-generation.ts) | Writing, rewriting, AI variables, contact research, AI skills |
 | [`templates.ts`](./templates.ts) | Reply templates: render, score, duplicate, reorder |
 | [`crm.ts`](./crm.ts) | Pipelines, deals, task types, and tasks |
 | [`integrations.ts`](./integrations.ts) | Connections, events, field mappings, push, bookings |
+| [`automations-and-lead-sync.ts`](./automations-and-lead-sync.ts) | Flow builder, meetings, Google Sheets lead sync |
 
 ## OAuth2
 
