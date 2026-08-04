@@ -1,16 +1,27 @@
 name: Release
 
+# Releases are cut manually: Actions -> Release -> "Run workflow".
+#
+# This used to run on every push to main and let changesets/action open a
+# "Version Packages" PR. That never worked here -- the org forbids GitHub
+# Actions from creating pull requests, so the job failed at PR creation on
+# every run since the repo's first commit. Versioning on an explicit dispatch
+# needs no PR, and the "Run workflow" click is the same human gate the PR was
+# meant to be (a better one, since GITHUB_TOKEN PRs don't trigger CI at all).
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Version and print the result without committing or publishing"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
-  pull-requests: write
   id-token: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release
   cancel-in-progress: false
 
 jobs:
@@ -18,7 +29,15 @@ jobs:
     name: Release
     runs-on: ubuntu-latest
     steps:
+      - name: Ensure release runs from main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::Releases must run from main (got ${{ github.ref }})."
+          exit 1
+
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
@@ -28,20 +47,64 @@ jobs:
       # Trusted publishing (OIDC) needs npm >= 11.5.1; Node 22 ships an older npm.
       - run: npm install -g npm@latest
       - run: pnpm install --frozen-lockfile
-      - run: pnpm build
 
-      # Opens or updates a "Version Packages" PR; on merge to main, publishes to npm.
+      - name: Check for pending changesets
+        run: |
+          if [ -z "$(find .changeset -name '*.md' -not -name 'README.md')" ]; then
+            echo "::error::No pending changesets -- nothing to release."
+            exit 1
+          fi
+
+      # A dispatch can target any commit on main, so re-verify rather than
+      # trusting whatever CI last ran. Same gate as ci.yml, plus the two package
+      # validations, which check exactly what is about to be published.
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm typecheck:examples
+      - run: pnpm test
+      - run: pnpm build
+      - name: Validate publishable package (publint)
+        run: pnpm check:publish
+      - name: Validate type resolution (are the types wrong)
+        run: pnpm check:exports
+
+      - name: Version packages
+        run: pnpm version-packages
+
+      - name: Summarize pending release
+        run: |
+          echo "Releasing version $(jq -r .version package.json)" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          git --no-pager diff --stat >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Stop before publishing (dry run)
+        if: inputs.dry_run
+        run: echo "::notice::Dry run -- skipping commit, tag and npm publish."
+
+      # Push the bump before publishing: a failed publish is re-runnable, but a
+      # published version with no matching commit is not.
+      - name: Commit and push the version bump
+        if: ${{ !inputs.dry_run }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore: version packages"
+          git push origin HEAD:main
+
       # Publishing uses npm trusted publishing (OIDC, via id-token: write): no NPM
-      # token is needed and provenance is generated automatically. Configure the
-      # trusted publisher for this package on npmjs.com first (package Settings ->
-      # Trusted Publisher: this repo + workflow file release.yml + action npm publish).
-      # The package must already exist on npm, so bootstrap the first version once.
-      - name: Create release PR or publish
-        uses: changesets/action@v1
-        with:
-          version: pnpm version-packages
-          publish: pnpm release
-          commit: "chore: version packages"
-          title: "chore: version packages"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # token is needed and provenance is generated automatically.
+      #
+      # 0.1.0 was published by hand (npm 10.8.2, no attestations), so this repo has
+      # never actually published from CI. Before the first release, configure the
+      # trusted publisher on npmjs.com: package Settings -> Trusted Publisher ->
+      # this repo, workflow file `release.yml`. Without it npm rejects the publish
+      # for want of credentials, since no NPM_TOKEN is set here on purpose.
+      - name: Publish to npm
+        if: ${{ !inputs.dry_run }}
+        run: pnpm release
+
+      - name: Push release tags
+        if: ${{ !inputs.dry_run }}
+        run: git push --tags
