@@ -84,3 +84,7 @@ bump and changelog to `main`, then publishes to npm with provenance and pushes t
 Contributors do not need to publish manually; just land a changeset with your change.
 
 Tick **dry run** to preview the version bump and changelog without committing or publishing.
+
+Publishing authenticates with npm trusted publishing (OIDC), so there is no npm token in this repo.
+Before the first release, a package owner must add the trusted publisher on npmjs.com: package
+Settings -> Trusted Publisher -> this repository, workflow file `release.yml`.
