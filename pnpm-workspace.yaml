@@ -3,3 +3,9 @@
 # platform binary; without this approval it installs unbuilt and the build fails.
 onlyBuiltDependencies:
   - esbuild
+
+# tsup pins esbuild ^0.27, which is below the fix for GHSA-g7r4-m6w7-qqqr. The
+# advisory only affects `esbuild serve`, which tsup never starts, so this is
+# hygiene rather than exposure. Drop it once tsup widens its range.
+overrides:
+  esbuild: ^0.28.1
