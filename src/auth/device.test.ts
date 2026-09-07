@@ -182,6 +182,31 @@ describe("DeviceAuth.waitForApproval", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("aborts a poll that is still in flight instead of waiting for it", async () => {
+    // A real fetch rejects when its signal aborts. Without the signal being forwarded the
+    // wait would sit here until the request settled or the 60s HTTP timeout fired.
+    let sawSignal: AbortSignal | undefined;
+    const fetchMock = vi.fn(
+      (_url: unknown, init: { signal?: AbortSignal }) =>
+        new Promise<Response>((_resolve, reject) => {
+          sawSignal = init.signal;
+          init.signal?.addEventListener("abort", () => reject(new Error("aborted")), {
+            once: true,
+          });
+        }),
+    );
+    const device = new DeviceAuth({ fetch: fetchMock as unknown as FetchLike });
+    const controller = new AbortController();
+    const waiting = device.waitForApproval(started, { signal: controller.signal });
+    // The client resolves a token before dispatching, so the fetch is several ticks away.
+    for (let i = 0; i < 50 && sawSignal === undefined; i += 1) await Promise.resolve();
+    expect(sawSignal).toBeDefined();
+    controller.abort();
+    const err = await waiting.catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(DeviceAuthError);
+    expect((err as DeviceAuthError).failure).toBe("aborted");
+  });
+
   it("stops when the signal aborts", async () => {
     vi.useFakeTimers();
     try {

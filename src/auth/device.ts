@@ -10,7 +10,7 @@ import { resolveClientOptions } from "../core/config";
 import { NotFoundError, WarmblyConnectionError, WarmblyError } from "../core/errors";
 import { sleep } from "../core/fetch";
 import { HttpClient } from "../core/http";
-import type { ClientOptions } from "../core/types";
+import type { ClientOptions, RequestOptions } from "../core/types";
 import { type PermissionInput, Permissions } from "../permissions";
 
 /** Options for {@link DeviceAuth}. Only the connection settings apply: there is no token yet. */
@@ -115,12 +115,14 @@ export class DeviceAuth {
 
   /**
    * Polls a device authorization once. An unknown or expired `device_code` is a 404.
+   * Pass `signal` to abort a poll that is still in flight.
    * @example
    * const poll = await device.poll(auth.device_code);
    * if (poll.status === "approved") console.log(poll.token);
    */
-  poll(deviceCode: string): Promise<DeviceAuthorizationPoll> {
+  poll(deviceCode: string, opts?: RequestOptions): Promise<DeviceAuthorizationPoll> {
     return this.http.post<DeviceAuthorizationPoll>("auth/cli/poll", {
+      ...opts,
       body: { device_code: deviceCode },
     });
   }
@@ -142,8 +144,15 @@ export class DeviceAuth {
       throwIfAborted(options.signal);
       let poll: DeviceAuthorizationPoll;
       try {
-        poll = await this.poll(auth.device_code);
+        // The signal travels with the request, so an abort ends a poll already in flight
+        // instead of leaving the caller waiting on it.
+        poll = await this.poll(
+          auth.device_code,
+          options.signal ? { signal: options.signal } : undefined,
+        );
       } catch (error) {
+        // An aborted request surfaces as a connection error; report the abort, not a retry.
+        throwIfAborted(options.signal);
         if (error instanceof NotFoundError) {
           throw new DeviceAuthError("expired", "The device code is unknown or has expired.", {
             cause: error,
