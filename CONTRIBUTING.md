@@ -85,6 +85,11 @@ Contributors do not need to publish manually; just land a changeset with your ch
 
 Tick **dry run** to preview the version bump and changelog without committing or publishing.
 
+Tick **already versioned** when the bump already landed in a pull request. Running
+`pnpm version-packages` in a PR consumes the changeset, and the workflow otherwise refuses
+with "No pending changesets". That option skips the changeset check and the bump, verifies the
+version in package.json is not already on npm, then publishes and tags it.
+
 `pnpm version-packages` also rewrites the `VERSION` constant in `src/version.ts`, which the
 User-Agent is built from and which Changesets does not know about. Do not edit that constant by
 hand; `src/version.test.ts` fails the build if it ever disagrees with package.json.
