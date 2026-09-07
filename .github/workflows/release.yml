@@ -15,6 +15,10 @@ on:
         description: "Version and print the result without committing or publishing"
         type: boolean
         default: false
+      already_versioned:
+        description: "Publish the version already in package.json (the bump landed in a PR, so no changeset is pending)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -49,11 +53,35 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Check for pending changesets
+        if: ${{ !inputs.already_versioned }}
         run: |
           if [ -z "$(find .changeset -name '*.md' -not -name 'README.md')" ]; then
-            echo "::error::No pending changesets -- nothing to release."
+            echo "::error::No pending changesets -- nothing to release. If the bump already landed in a PR, re-run with already_versioned."
             exit 1
           fi
+
+      # A PR that carries its own `pnpm version-packages` consumes the changeset, so the
+      # check above would refuse a release the repo is otherwise ready for. The version in
+      # package.json is then the whole instruction, and the only thing that can go wrong is
+      # aiming at one npm already has, so that is what this asserts.
+      - name: Check the version is not already published
+        if: ${{ inputs.already_versioned }}
+        run: |
+          version="$(jq -r .version package.json)"
+          errors="$(mktemp)"
+          trap 'rm -f "$errors"' EXIT
+          # npm view exits non-zero both for "no such version" and for a lookup that never
+          # got an answer, so match E404 rather than the status. Treating a registry outage
+          # as "not published" would fail open on the last check before an irreversible publish.
+          if npm view "warmbly@${version}" version >/dev/null 2>"$errors"; then
+            echo "::error::warmbly@${version} is already on npm. Bump the version before releasing."
+            exit 1
+          elif ! grep -q 'E404' "$errors"; then
+            cat "$errors" >&2
+            echo "::error::Could not confirm whether warmbly@${version} is published; refusing to release."
+            exit 1
+          fi
+          echo "Releasing the version already committed: warmbly@${version}"
 
       # A dispatch can target any commit on main, so re-verify rather than
       # trusting whatever CI last ran. Same gate as ci.yml, plus the two package
@@ -69,6 +97,7 @@ jobs:
         run: pnpm check:exports
 
       - name: Version packages
+        if: ${{ !inputs.already_versioned }}
         run: pnpm version-packages
 
       - name: Summarize pending release
@@ -85,7 +114,7 @@ jobs:
       # Push the bump before publishing: a failed publish is re-runnable, but a
       # published version with no matching commit is not.
       - name: Commit and push the version bump
-        if: ${{ !inputs.dry_run }}
+        if: ${{ !inputs.dry_run && !inputs.already_versioned }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
