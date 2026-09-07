@@ -378,3 +378,49 @@ describe("Misc deliverability and DLQ", () => {
     expect(url).toContain("/tasks/dlq/dl_1/replay");
   });
 });
+
+describe("Misc.authConfig", () => {
+  it("GETs /auth/config and returns the deployment capabilities", async () => {
+    const { http, fetchMock } = clientWith({
+      self_hosted: true,
+      websocket_url: "wss://rt.acme.internal",
+      app_url: "https://warmbly.acme.internal",
+    });
+    const out = await new Misc(http).authConfig();
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("GET");
+    expect(url).toMatch(/\/auth\/config$/);
+    expect(out.websocket_url).toBe("wss://rt.acme.internal");
+  });
+});
+
+describe("Misc reordering", () => {
+  it("moveFolder PATCHes /folders/:id/move with the position", async () => {
+    const { http, fetchMock } = clientWith([
+      { id: "f1", position: 0 },
+      { id: "f2", position: 1 },
+    ]);
+    const order = await new Misc(http).moveFolder("f1", 0);
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("PATCH");
+    expect(url).toContain("/folders/f1/move");
+    expect(JSON.parse(String(init.body))).toEqual({ position: 0 });
+    expect(order).toHaveLength(2);
+    expect(order[0]?.position).toBe(0);
+  });
+
+  it("moveTag PATCHes /tags/:id/move", async () => {
+    const { http, fetchMock } = clientWith([{ id: "t1", position: 2 }]);
+    await new Misc(http).moveTag("t1", 2);
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("PATCH");
+    expect(url).toContain("/tags/t1/move");
+    expect(JSON.parse(String(init.body))).toEqual({ position: 2 });
+  });
+
+  it("moveCategory PATCHes /categories/:id/move and encodes the id", async () => {
+    const { http, fetchMock } = clientWith([{ id: "a/b", position: 1 }]);
+    await new Misc(http).moveCategory("a/b", 1);
+    expect(lastCall(fetchMock).url).toContain("/categories/a%2Fb/move");
+  });
+});

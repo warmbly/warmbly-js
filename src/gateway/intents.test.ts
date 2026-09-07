@@ -8,6 +8,8 @@ describe("intents", () => {
       "CAMPAIGN",
       "EMAIL",
       "CONTACT",
+      "FORM",
+      "PAGE",
       "ACCOUNT",
       "BULK",
       "AUTOMATION",
@@ -26,6 +28,14 @@ describe("intents", () => {
     expect(matchesIntents("AI_RESEARCH_PROGRESS", ["RESEARCH"])).toBe(true);
     expect(matchesIntents("BILLING_CREDITS_LOW", ["BILLING"])).toBe(true);
     expect(matchesIntents("EMAIL_SENT", ["BILLING"])).toBe(false);
+  });
+
+  it("matches the form, page-hit, sync-state, and idle events with their intents", () => {
+    expect(matchesIntents("FORM_SUBMISSION_CREATED", ["FORM"])).toBe(true);
+    expect(matchesIntents("PAGE_HIT", ["PAGE"])).toBe(true);
+    expect(matchesIntents("ACCOUNT_SYNC_STATE", ["ACCOUNT"])).toBe(true);
+    expect(matchesIntents("CAMPAIGN_IDLE", ["CAMPAIGN"])).toBe(true);
+    expect(matchesIntents("PAGE_HIT", ["FORM"])).toBe(false);
   });
 
   it("normalizes by trimming, uppercasing, and deduping", () => {

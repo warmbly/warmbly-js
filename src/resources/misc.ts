@@ -23,6 +23,16 @@ export interface Category {
   [key: string]: unknown;
 }
 
+/**
+ * One entry's place in an ordered list, as returned by a reorder. The response is the
+ * whole list's new order, not just the row that moved.
+ */
+export interface GroupOrder {
+  id: string;
+  position: number;
+  [key: string]: unknown;
+}
+
 /** A team. Documented-but-open shape. */
 export interface Team {
   id: string;
@@ -73,6 +83,35 @@ export interface Identity {
   auth_type?: "api_key" | "oauth" | "jwt" | string;
   /** The scope strings the credential was granted. */
   scopes?: string[];
+  [key: string]: unknown;
+}
+
+/**
+ * Public deployment capabilities, from {@link Misc.authConfig}. On a self-hosted
+ * instance this is the only way to discover the realtime gateway and dashboard URLs.
+ */
+export interface AuthConfig {
+  captcha?: boolean;
+  password_login?: boolean;
+  login_code?: string;
+  registration?: string;
+  email_verification?: boolean;
+  mail_delivers?: boolean;
+  passkeys?: boolean;
+  /** Browser sign-in providers this backend offers. */
+  providers?: string[];
+  provider_labels?: Record<string, string>;
+  self_hosted?: boolean;
+  /** False under `BILLING_PROVIDER=none`, where every feature is unlocked server-side. */
+  billing_enabled?: boolean;
+  /** True while the instance still needs its first-run claim. */
+  setup_required?: boolean;
+  invites_required?: boolean;
+  docs_url?: string;
+  /** The realtime gateway a client connects to. Omitted when the instance has none. */
+  websocket_url?: string;
+  /** The dashboard origin a client sends someone to. Omitted when the instance has none. */
+  app_url?: string;
   [key: string]: unknown;
 }
 
@@ -138,6 +177,19 @@ export class Misc extends APIResource {
     return this.http.get<Identity>("me", opts);
   }
 
+  /**
+   * Reads the deployment's public capabilities: sign-in methods, whether signups are
+   * open, and on a self-hosted layout the `websocket_url` and `app_url` a client needs.
+   * Public and unauthenticated, so it works before any credential exists.
+   *
+   * @example
+   * const { websocket_url } = await warmbly.misc.authConfig();
+   * const gw = warmbly.gateway({ url: websocket_url, orgId: "org_1" });
+   */
+  authConfig(opts?: RequestOptions): Promise<AuthConfig> {
+    return this.http.get<AuthConfig>("auth/config", opts);
+  }
+
   // --- Folders ---
   // The API exposes create/update/delete for folders, tags, and categories; there is no
   // list endpoint for any of the three (they are read through their owning resources).
@@ -150,6 +202,18 @@ export class Misc extends APIResource {
   /** Updates a folder. @example await warmbly.misc.updateFolder("f_1", { title: "B" }); */
   updateFolder(id: string, params: Record<string, unknown>): Promise<Folder> {
     return this.http.patch<Folder>(this.path("folders", id), { body: params });
+  }
+
+  /**
+   * Moves a folder to a position in the list, returning every folder's new order.
+   * Last-write-wins, so retries are safe.
+   * @example
+   * const order = await warmbly.misc.moveFolder("f_1", 0);
+   */
+  moveFolder(id: string, position: number): Promise<GroupOrder[]> {
+    return this.http.patch<GroupOrder[]>(this.path("folders", id, "move"), {
+      body: { position },
+    });
   }
 
   /** Deletes a folder. @example await warmbly.misc.deleteFolder("f_1"); */
@@ -169,6 +233,15 @@ export class Misc extends APIResource {
     return this.http.patch<Tag>(this.path("tags", id), { body: params });
   }
 
+  /**
+   * Moves a tag to a position in the list, returning every tag's new order.
+   * @example
+   * const order = await warmbly.misc.moveTag("t_1", 2);
+   */
+  moveTag(id: string, position: number): Promise<GroupOrder[]> {
+    return this.http.patch<GroupOrder[]>(this.path("tags", id, "move"), { body: { position } });
+  }
+
   /** Deletes a tag. @example await warmbly.misc.deleteTag("t_1"); */
   deleteTag(id: string, opts?: RequestOptions): Promise<void> {
     return this.http.delete<void>(this.path("tags", id), opts);
@@ -184,6 +257,17 @@ export class Misc extends APIResource {
   /** Updates a category. @example await warmbly.misc.updateCategory("c_1", { title: "X" }); */
   updateCategory(id: string, params: Record<string, unknown>): Promise<Category> {
     return this.http.patch<Category>(this.path("categories", id), { body: params });
+  }
+
+  /**
+   * Moves a category to a position in the list, returning every category's new order.
+   * @example
+   * const order = await warmbly.misc.moveCategory("c_1", 1);
+   */
+  moveCategory(id: string, position: number): Promise<GroupOrder[]> {
+    return this.http.patch<GroupOrder[]>(this.path("categories", id, "move"), {
+      body: { position },
+    });
   }
 
   /** Deletes a category. @example await warmbly.misc.deleteCategory("c_1"); */

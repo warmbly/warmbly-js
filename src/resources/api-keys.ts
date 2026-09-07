@@ -207,6 +207,20 @@ export class ApiKeys extends APIResource {
   }
 
   /**
+   * Revokes the API key this client is authenticated with. Needs no scope at all, so a
+   * narrowly scoped credential can always end itself (this is what `warmbly auth logout`
+   * uses). A session (JWT) caller gets a 400: there is no key in that request to end.
+   *
+   * @example
+   * await warmbly.apiKeys.revokeSelf("laptop returned");
+   */
+  revokeSelf(reason?: string): Promise<{ status: string }> {
+    return this.http.delete<{ status: string }>("api-keys/self", {
+      query: reason !== undefined ? { reason } : undefined,
+    });
+  }
+
+  /**
    * Returns the aggregate usage summary across all keys.
    *
    * @example

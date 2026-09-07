@@ -2,13 +2,28 @@ import type { Page } from "../core/pagination";
 import type { RequestOptions } from "../core/types";
 import { APIResource } from "./base";
 
-/** A unified-inbox conversation item. Documented-but-open shape. */
+/** A canonical unibox folder. */
+export type UniboxFolder = "inbox" | "sent" | "drafts" | "archive" | "spam" | "trash";
+
+/**
+ * A unified-inbox message. List and thread rows carry `snippet`, a one-line preview;
+ * {@link Unibox.get} adds the sanitized `body_html` and `body_plain`.
+ */
 export interface UniboxItem {
   id: string;
   thread_id?: string;
   subject?: string;
   from?: string;
   seen?: boolean;
+  folder?: UniboxFolder | (string & {});
+  /** A one-line summary, not the body. */
+  snippet?: string;
+  /** Sanitized HTML body (scripts, handlers, frames, and unsafe URLs removed). Only on `get`. */
+  body_html?: string;
+  /** Plain-text body. Only on `get`. */
+  body_plain?: string;
+  /** True on the rare message whose stored body could not be read. */
+  body_truncated?: boolean;
   snoozed_until?: string | null;
   created_at?: string;
   [key: string]: unknown;
@@ -32,6 +47,19 @@ export interface ListUniboxParams {
   address?: string;
   /** Split the list by direction, resolved against your own mailbox addresses. */
   direction?: "sent" | "received";
+  /** One canonical folder. Omit for every folder except `spam` and `trash`. */
+  folder?: UniboxFolder;
+  [key: string]: unknown;
+}
+
+/**
+ * Body for {@link Unibox.markSeen}: an explicit batch of up to 500 ids, or a whole
+ * canonical folder. Send one of `email_ids` or `folder`, not both.
+ */
+export interface MarkSeenParams {
+  email_ids?: string[];
+  folder?: UniboxFolder;
+  seen: boolean;
   [key: string]: unknown;
 }
 
@@ -271,11 +299,13 @@ export class Unibox extends APIResource {
   }
 
   /**
-   * Marks conversations as seen.
+   * Marks messages as read or unread, org-wide: an explicit batch of up to 500 ids, or
+   * a whole canonical folder. Send one of `email_ids` or `folder`.
    * @example
-   * await warmbly.unibox.markSeen({ ids: ["ub_1"], seen: true });
+   * await warmbly.unibox.markSeen({ email_ids: ["ub_1"], seen: true });
+   * await warmbly.unibox.markSeen({ folder: "inbox", seen: true });
    */
-  markSeen(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+  markSeen(params: MarkSeenParams): Promise<Record<string, unknown>> {
     return this.http.patch<Record<string, unknown>>("unibox/seen", { body: params });
   }
 

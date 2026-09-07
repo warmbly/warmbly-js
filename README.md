@@ -90,13 +90,17 @@ Resources hang off the client and mirror the API surface:
 | --- | --- |
 | `warmbly.apiKeys` | API keys, usage analytics, permission catalog |
 | `warmbly.campaigns` | Campaigns, sequence steps, A/B variants, attachments, lifecycle |
-| `warmbly.contacts` | Contacts, search, import/export, notes, timeline, activities |
-| `warmbly.emails` | Email accounts (mailboxes), warmup controls, sending |
+| `warmbly.contacts` | Contacts, search, import/export, verification, notes, timeline, campaign state |
+| `warmbly.segments` | Saved contact audiences: conditions, manual overrides, campaign enrolment |
+| `warmbly.forms` | Hosted lead-capture forms, submissions, statistics, custom domain |
+| `warmbly.suppressions` | The workspace suppression list |
+| `warmbly.emails` | Email accounts (mailboxes), warmup, tracking domain, hold/release, sending behaviour, sending |
 | `warmbly.unibox` | Unified inbox: threads, replies, compose, drafts, labels, snoozes |
 | `warmbly.analytics` | Dashboard, deliverability, warmup, and campaign analytics |
 | `warmbly.advisor` | Recommendations about your sending posture, and the fixes for them |
 | `warmbly.generation` | AI writing: compose, rewrite a selection, preview AI variables |
 | `warmbly.aiSkills` | Organization playbooks every AI surface follows |
+| `warmbly.agentTools` | The AI tool registry over HTTP, for function-calling agents without MCP |
 | `warmbly.templates` | Reply templates: render, score, duplicate |
 | `warmbly.crm` | Pipelines, deals, task types, tasks |
 | `warmbly.meetings` | Booked calls from Calendly and Cal.com, plus manual entries |
@@ -104,7 +108,7 @@ Resources hang off the client and mirror the API surface:
 | `warmbly.automations` | The visual flow builder: trigger events plus action steps |
 | `warmbly.leadSync` | On-demand Google Sheets to contacts sync |
 | `warmbly.webhooks` | Webhook endpoints, deliveries, event types |
-| `warmbly.misc` | Caller identity, folders, tags, categories, teams, audit logs, deliverability ingestion, the task DLQ, plans, timezones |
+| `warmbly.misc` | Caller identity, deployment config, folders, tags, categories, teams, audit logs, deliverability ingestion, the task DLQ, plans, timezones |
 
 Validate a credential and find out who it belongs to with `warmbly.misc.me()` — it needs no
 particular scope, so it works with any API key, OAuth token, or session:
@@ -112,6 +116,39 @@ particular scope, so it works with any API key, OAuth token, or session:
 ```ts
 const me = await warmbly.misc.me();
 console.log(`${me.email} @ ${me.organization_name} (${me.auth_type})`, me.scopes);
+```
+
+### Audiences and forms
+
+Segments are saved contact audiences, evaluated live. Link one to a campaign and every
+contact who enters it is enrolled automatically; a `continuous` campaign then waits for
+new leads instead of finishing.
+
+```ts
+const segment = await warmbly.segments.create({
+  name: "Warm fintech leads",
+  match: "all",
+  conditions: [
+    { field: "custom.industry", operator: "equals", value: "fintech" },
+    { field: "last_opened_at", operator: "within_days", value: "30" },
+  ],
+});
+const { added } = await warmbly.campaigns.setSegments("camp_1", [segment.id]);
+
+const form = await warmbly.forms.create({ name: "Demo request" });
+await warmbly.forms.update(form.id, { status: "published", campaign_id: "camp_1" });
+const { url } = await warmbly.forms.mintLink(form.id, "c_1"); // personalized link
+```
+
+### Agent tools
+
+Function-calling agents that do not speak MCP get the same permission-filtered tool
+registry over plain HTTP. Send-class tools are never exposed, so a human always presses send.
+
+```ts
+const tools = await warmbly.agentTools.list({ format: "openai" }); // or "hermes"
+// ...when the model emits a tool call:
+const { result } = await warmbly.agentTools.call("list_threads", { folder: "inbox", limit: 10 });
 ```
 
 ### AI features
@@ -273,6 +310,8 @@ gw.on("EMAIL_REPLIED", (e) => console.log("reply", e.thread_id));
 gw.on("CUSTOM_EVENT", (e) => console.log(e.name, e.payload));
 gw.on("AI_DRAFT_READY", (e) => console.log("draft awaiting review", e.draft_id));
 gw.on("BILLING_CREDITS_LOW", (e) => console.log("credits low", e.balance, e.threshold));
+gw.on("CAMPAIGN_IDLE", (e) => console.log("waiting for leads", e.campaign_id));
+gw.on("FORM_SUBMISSION_CREATED", (e) => console.log("form submitted", e.form_id));
 
 // Lifecycle
 gw.on("hello", (h) => console.log("connected at seq", h.seq));
@@ -284,7 +323,12 @@ await gw.connect();
 gw.close();
 ```
 
-**Intents** are event families (`EMAIL`, `CAMPAIGN`, `AUDIT`, `CUSTOM`, `AI`, `BILLING`, and more) that narrow the stream so you only receive and pay the rate budget for what you act on. **Channels** beyond the org stream are joinable too: `gw.joinCampaign(id)`, `gw.joinAccount(id)`, `gw.joinBulk(id)`.
+**Intents** are event families (`EMAIL`, `CAMPAIGN`, `AUDIT`, `CUSTOM`, `AI`, `BILLING`, `FORM`, `PAGE`, and more) that narrow the stream so you only receive and pay the rate budget for what you act on. **Channels** beyond the org stream are joinable too: `gw.joinCampaign(id)`, `gw.joinAccount(id)`, `gw.joinBulk(id)`.
+
+Joins have their own per-minute budget. When the server refuses one as `rate_limited`, the
+client emits `rateLimited` (with the `topic` and `retry_after_ms`), keeps the socket open, and
+re-sends that join once the budget resets. Every other join refusal is final and surfaces as an
+`error`.
 
 To connect, the token must be an API key with the `REALTIME_SUBSCRIBE` permission, or an OAuth access token with the `realtime_subscribe` scope. The client inherits the token from the `Warmbly` client automatically.
 
@@ -320,6 +364,28 @@ const client = await OAuthClient.register({
 });
 const oauth = new OAuthClient({ clientId: client.client_id });
 ```
+
+## Device-code sign-in
+
+A tool with no credential yet (a CLI, a build agent) can sign in the way `warmbly auth login`
+does: show a short code, let a signed-in member approve it in the dashboard, and receive an
+API key scoped to the permissions it asked for. Two public endpoints and a browser.
+
+```ts
+import { DeviceAuth, Warmbly } from "warmbly";
+
+const device = new DeviceAuth(); // pass { baseUrl } for a self-hosted instance
+const auth = await device.start({ client_name: "my-tool", scopes: ["read_campaigns"] });
+console.log(`Open ${auth.verification_uri_complete} and confirm code ${auth.user_code}`);
+
+const approved = await device.waitForApproval(auth); // polls at the server's interval
+const warmbly = new Warmbly({ apiKey: approved.token });
+// ...and when the machine is handed back:
+await warmbly.apiKeys.revokeSelf(); // needs no scope at all
+```
+
+On a self-hosted instance, `warmbly.misc.authConfig()` reports the `websocket_url` and
+`app_url` the operator chose, so a client can find the gateway and the dashboard.
 
 ## Verifying webhooks
 

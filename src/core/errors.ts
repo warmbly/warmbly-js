@@ -22,10 +22,51 @@ export class WarmblyError extends Error {
   }
 }
 
+/**
+ * The stable, machine-readable `code` values the API documents, for branching on
+ * {@link WarmblyAPIError.code}. Open-ended: codes added after this release still type-check.
+ *
+ * @example
+ * if (err instanceof WarmblyAPIError && err.code === "list_bounce_risk") {
+ *   await warmbly.campaigns.start(id, { acknowledge_list_risk: true });
+ * }
+ */
+export type ErrorCode =
+  | "bad_request"
+  | "unauthorized"
+  | "forbidden"
+  | "not_found"
+  | "conflict"
+  | "unprocessable"
+  | "rate_limited"
+  | "internal_error"
+  | "no_organization"
+  | "insufficient_credits"
+  | "storage_limit_reached"
+  | "mailbox_allowance_reached"
+  | "mailbox_provider_not_configured"
+  | "mailbox_worker_unreachable"
+  | "list_bounce_risk"
+  | "leads_undeliverable"
+  | "lead_filter_requires_campaign"
+  | "invalid_lead_status"
+  | "invalid_engagement"
+  | "unknown_verification_status"
+  | "unknown_verification_provider"
+  | "invalid_action"
+  | "no_contacts"
+  | "registration_invite_only"
+  | "registration_closed"
+  | "invitation_invalid"
+  | "setup_already_complete"
+  | "setup_token_invalid"
+  | "sso_wrong_browser"
+  | (string & {});
+
 /** Options used to construct a {@link WarmblyAPIError}. */
 export interface WarmblyAPIErrorOptions {
   status: number;
-  code?: string | undefined;
+  code?: ErrorCode | undefined;
   requestId?: string | undefined;
   body?: unknown;
   headers?: Headers | undefined;
@@ -46,8 +87,8 @@ export interface WarmblyAPIErrorOptions {
 export class WarmblyAPIError extends WarmblyError {
   /** HTTP status code. */
   readonly status: number;
-  /** Stable machine-readable error code, when provided. */
-  readonly code: string | undefined;
+  /** Stable machine-readable error code, when provided. See {@link ErrorCode}. */
+  readonly code: ErrorCode | undefined;
   /** Request id, useful when contacting support. */
   readonly requestId: string | undefined;
   /** The parsed response body, when available. */

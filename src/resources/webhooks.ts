@@ -98,6 +98,7 @@ export const WEBHOOK_EVENTS = [
   "contact.created",
   "contact.updated",
   "contact.deleted",
+  "form.submitted",
 
   "bulk_operation.started",
   "bulk_operation.completed",

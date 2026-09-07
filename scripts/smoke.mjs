@@ -2,7 +2,7 @@
 // is present. Run under Node, Bun, and Deno in CI to prove real resolution, not just "it compiles".
 import * as warmbly from "../dist/index.js";
 
-const required = ["Warmbly", "WarmblyError", "Permissions"];
+const required = ["Warmbly", "WarmblyError", "Permissions", "DeviceAuth"];
 const missing = required.filter((name) => !(name in warmbly));
 
 if (missing.length > 0) {

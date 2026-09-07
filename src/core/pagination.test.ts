@@ -199,3 +199,23 @@ describe("Page", () => {
     });
   });
 });
+
+describe("Page with a countless envelope", () => {
+  it("keeps a pagination object that omits total, and still walks pages", async () => {
+    // The unibox, audit logs, campaign logs, webhook deliveries and suppressions return
+    // { next_cursor, has_more } with no total key at all.
+    const second = new Page<{ id: string }>({
+      data: [{ id: "b" }],
+      pagination: { next_cursor: null, has_more: false } as never,
+    });
+    const first = new Page<{ id: string }>(
+      { data: [{ id: "a" }], pagination: { next_cursor: "cur", has_more: true } as never },
+      async () => second,
+    );
+    expect(first.pagination.total).toBeUndefined();
+    expect(first.hasNextPage()).toBe(true);
+    const all: string[] = [];
+    for await (const item of first) all.push(item.id);
+    expect(all).toEqual(["a", "b"]);
+  });
+});

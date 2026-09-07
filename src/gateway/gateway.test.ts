@@ -1132,3 +1132,153 @@ describe("Gateway close during pending reconnect", () => {
     expect(gw.state).toBe("closed");
   });
 });
+
+describe("Gateway join rate limiting", () => {
+  it("re-sends a rate-limited channel join after retry_after_ms without reconnecting", async () => {
+    vi.useFakeTimers();
+    const gw = new Gateway({ orgId: "org_1", token: "t", webSocket: FakeCtor });
+    const socket = await connectReady(gw);
+    const rate = vi.fn();
+    const error = vi.fn();
+    gw.on("rateLimited", rate);
+    gw.on("error", error);
+
+    gw.joinCampaign("camp_1");
+    const joinsBefore = socket.frames().filter((f) => f[2] === "campaign:camp_1").length;
+    expect(joinsBefore).toBe(1);
+
+    socket.message([
+      null,
+      null,
+      "campaign:camp_1",
+      "phx_reply",
+      {
+        status: "error",
+        response: { code: 4007, reason: "rate_limited", category: "ws_join", retry_after_ms: 2000 },
+      },
+    ]);
+    expect(rate).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: "rate_limited", topic: "campaign:camp_1" }),
+    );
+    expect(error).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(1999);
+    expect(socket.frames().filter((f) => f[2] === "campaign:camp_1").length).toBe(1);
+    vi.advanceTimersByTime(1);
+    const rejoins = socket.frames().filter((f) => f[2] === "campaign:camp_1");
+    expect(rejoins.length).toBe(2);
+    expect(rejoins[1]?.[3]).toBe("phx_join");
+    expect(FakeWebSocket.instances.length).toBe(1);
+    expect(gw.state).toBe("ready");
+  });
+
+  it("re-sends a rate-limited org join with the resume marker", async () => {
+    vi.useFakeTimers();
+    const gw = new Gateway({ orgId: "org_1", token: "t", webSocket: FakeCtor, intents: ["EMAIL"] });
+    const ready = gw.connect();
+    const socket = await nextSocket();
+    socket.open();
+    await Promise.resolve();
+    const ref = orgJoinRef(socket);
+    socket.message([
+      ref,
+      ref,
+      "org:org_1",
+      "phx_reply",
+      { status: "error", response: { code: 4007, reason: "rate_limited", retry_after_ms: 500 } },
+    ]);
+    expect(gw.state).toBe("identifying");
+    vi.advanceTimersByTime(500);
+    const joins = socket.frames().filter((f) => f[2] === "org:org_1" && f[3] === "phx_join");
+    expect(joins.length).toBe(2);
+    const rejoin = joins[1] as unknown[];
+    expect((rejoin[4] as { intents?: string[] }).intents).toEqual(["EMAIL"]);
+
+    const ref2 = rejoin[0] as string;
+    socket.message([
+      ref2,
+      ref2,
+      "org:org_1",
+      "phx_reply",
+      {
+        status: "ok",
+        response: {
+          org_id: "org_1",
+          role: "owner",
+          heartbeat_interval_ms: 25_000,
+          server_timeout_ms: 60_000,
+          seq: 1,
+          resume_supported: true,
+        },
+      },
+    ]);
+    await ready;
+    expect(gw.state).toBe("ready");
+  });
+
+  it("falls back to a default delay when retry_after_ms is missing", async () => {
+    vi.useFakeTimers();
+    const gw = new Gateway({ orgId: "org_1", token: "t", webSocket: FakeCtor });
+    const socket = await connectReady(gw);
+    gw.joinAccount("acc_1");
+    socket.message([
+      null,
+      null,
+      "account:acc_1",
+      "phx_reply",
+      { status: "error", response: { reason: "rate_limited" } },
+    ]);
+    vi.advanceTimersByTime(4999);
+    expect(socket.frames().filter((f) => f[2] === "account:acc_1").length).toBe(1);
+    vi.advanceTimersByTime(1);
+    expect(socket.frames().filter((f) => f[2] === "account:acc_1").length).toBe(2);
+  });
+
+  it("drops a pending rejoin when the gateway is closed", async () => {
+    vi.useFakeTimers();
+    const gw = new Gateway({ orgId: "org_1", token: "t", webSocket: FakeCtor });
+    const socket = await connectReady(gw);
+    gw.joinCampaign("camp_1");
+    socket.message([
+      null,
+      null,
+      "campaign:camp_1",
+      "phx_reply",
+      { status: "error", response: { reason: "rate_limited", retry_after_ms: 100 } },
+    ]);
+    gw.close();
+    vi.advanceTimersByTime(100);
+    expect(socket.frames().filter((f) => f[2] === "campaign:camp_1").length).toBe(1);
+  });
+
+  it("does not reconnect after a malformed-topic close", async () => {
+    vi.useFakeTimers();
+    const gw = new Gateway({ orgId: "org_1", token: "t", webSocket: FakeCtor });
+    const socket = await connectReady(gw);
+    const reconnecting = vi.fn();
+    gw.on("reconnecting", reconnecting);
+    socket.fire("close", { code: GatewayCloseCode.MALFORMED_TOPIC, reason: "bad topic" });
+    // Retrying cannot help: the topic itself has to change first.
+    vi.advanceTimersByTime(60_000);
+    expect(reconnecting).not.toHaveBeenCalled();
+    expect(FakeWebSocket.instances.length).toBe(1);
+    expect(gw.state).toBe("closed");
+  });
+
+  it("reports a malformed-topic refusal as a final error", async () => {
+    const gw = new Gateway({ orgId: "org_1", token: "t", webSocket: FakeCtor });
+    const socket = await connectReady(gw);
+    const error = vi.fn();
+    gw.on("error", error);
+    socket.message([
+      null,
+      null,
+      "campaign:not-a-uuid",
+      "phx_reply",
+      { status: "error", response: { code: 4005, reason: "malformed_topic" } },
+    ]);
+    const err = error.mock.calls[0][0] as GatewayError;
+    expect(err.code).toBe(GatewayCloseCode.MALFORMED_TOPIC);
+    expect(err.reason).toBe("malformed_topic");
+  });
+});

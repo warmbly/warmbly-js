@@ -28,6 +28,10 @@ export interface GatewayEventBase {
 export interface CampaignEvent extends GatewayEventBase {
   /** The affected campaign's id. */
   campaign_id?: string;
+  org_id?: string;
+  name?: string;
+  /** The campaign's status after the event. `CAMPAIGN_IDLE` keeps it `active`. */
+  status?: string;
 }
 
 /** An email or message event. */
@@ -38,16 +42,85 @@ export interface EmailEvent extends GatewayEventBase {
   campaign_id?: string;
   /** The contact the email relates to, when applicable. */
   contact_id?: string;
+  contact_email?: string;
   /** The email account the message was sent from or received on, when applicable. */
   account_id?: string;
   /** The conversation thread id, when applicable. */
   thread_id?: string;
+  org_id?: string;
+  /** The sequence step, on tracking events. */
+  step_id?: string;
+  subject?: string;
+  from?: string;
+  preview?: string;
+  /** The canonical folder, on inbox events. */
+  folder?: string;
+  /** The clicked URL, on `EMAIL_CLICKED`. */
+  original_url?: string;
+  /** The anchor text of the clicked link, on `EMAIL_CLICKED`. */
+  link_label?: string;
+  /** True for an automated open or click (a mail client prefetch, a security scanner). */
+  machine?: boolean;
+  /** When the tracking service saw the open or click; `timestamp` is the publish time. */
+  occurred_at?: string;
+  /** The mail client or browser, when the consumer could tell. */
+  client?: string;
+  device_type?: string;
+  country_code?: string;
+  city?: string;
 }
 
 /** An email account (mailbox) connection or health event. */
 export interface AccountEvent extends GatewayEventBase {
   /** The affected account's id. */
   account_id?: string;
+  org_id?: string;
+  email?: string;
+  provider?: string;
+  status?: string;
+  reason?: string;
+}
+
+/**
+ * A mailbox's import finished, or fair use started or stopped holding it. `status`
+ * carries the backfill status and `reason` the throttle reason (empty when released).
+ *
+ * @example
+ * gw.on("ACCOUNT_SYNC_STATE", (e) => console.log(e.account_id, e.status, e.reason));
+ */
+export interface AccountSyncStateEvent extends AccountEvent {
+  event_type: "ACCOUNT_SYNC_STATE";
+}
+
+/**
+ * A website page view landed for an identified contact. Org-scoped; refetch the
+ * contact's timeline for the full view.
+ *
+ * @example
+ * gw.on("PAGE_HIT", (e) => console.log(e.contact_id, e.url));
+ */
+export interface PageHitEvent extends GatewayEventBase {
+  event_type: "PAGE_HIT";
+  org_id?: string;
+  contact_id?: string;
+  url?: string;
+  title?: string;
+}
+
+/**
+ * A hosted form received a submission. Ids only: the submission body stays behind the
+ * list endpoint's permission.
+ *
+ * @example
+ * gw.on("FORM_SUBMISSION_CREATED", (e) => refreshSubmissions(e.form_id));
+ */
+export interface FormSubmissionEvent extends GatewayEventBase {
+  event_type: "FORM_SUBMISSION_CREATED";
+  org_id?: string;
+  form_id?: string;
+  submission_id?: string;
+  /** The contact created or matched, when one was. */
+  contact_id?: string;
 }
 
 /** A contact create/update/delete event. */
@@ -211,6 +284,8 @@ export interface WarmblyEventMap {
   CAMPAIGN_STARTED: CampaignEvent;
   CAMPAIGN_PAUSED: CampaignEvent;
   CAMPAIGN_COMPLETED: CampaignEvent;
+  /** A continuous campaign ran out of leads and is waiting for more (status stays `active`). */
+  CAMPAIGN_IDLE: CampaignEvent;
 
   EMAIL_SENT: EmailEvent;
   EMAIL_OPENED: EmailEvent;
@@ -226,11 +301,15 @@ export interface WarmblyEventMap {
   ACCOUNT_ERROR: AccountEvent;
   ACCOUNT_SYNCED: AccountEvent;
   ACCOUNT_HEALTH_CHANGED: AccountEvent;
+  ACCOUNT_SYNC_STATE: AccountSyncStateEvent;
 
   CONTACT_CREATED: ContactEvent;
   CONTACT_UPDATED: ContactEvent;
   CONTACT_DELETED: ContactEvent;
   CONTACTS_RELOAD: ContactsReloadEvent;
+
+  PAGE_HIT: PageHitEvent;
+  FORM_SUBMISSION_CREATED: FormSubmissionEvent;
 
   BULK_STARTED: BulkEvent;
   BULK_PROGRESS: BulkEvent;
@@ -276,6 +355,7 @@ export const WARMBLY_EVENTS = {
   CAMPAIGN_STARTED: "CAMPAIGN_STARTED",
   CAMPAIGN_PAUSED: "CAMPAIGN_PAUSED",
   CAMPAIGN_COMPLETED: "CAMPAIGN_COMPLETED",
+  CAMPAIGN_IDLE: "CAMPAIGN_IDLE",
 
   EMAIL_SENT: "EMAIL_SENT",
   EMAIL_OPENED: "EMAIL_OPENED",
@@ -291,11 +371,15 @@ export const WARMBLY_EVENTS = {
   ACCOUNT_ERROR: "ACCOUNT_ERROR",
   ACCOUNT_SYNCED: "ACCOUNT_SYNCED",
   ACCOUNT_HEALTH_CHANGED: "ACCOUNT_HEALTH_CHANGED",
+  ACCOUNT_SYNC_STATE: "ACCOUNT_SYNC_STATE",
 
   CONTACT_CREATED: "CONTACT_CREATED",
   CONTACT_UPDATED: "CONTACT_UPDATED",
   CONTACT_DELETED: "CONTACT_DELETED",
   CONTACTS_RELOAD: "CONTACTS_RELOAD",
+
+  PAGE_HIT: "PAGE_HIT",
+  FORM_SUBMISSION_CREATED: "FORM_SUBMISSION_CREATED",
 
   BULK_STARTED: "BULK_STARTED",
   BULK_PROGRESS: "BULK_PROGRESS",
@@ -342,6 +426,23 @@ export interface CloseInfo {
 }
 
 /**
+ * Payload for the `rateLimited` lifecycle event: a server `rate_limited` push, or a
+ * `phx_join` refused over the join budget. For a refused join the gateway waits out
+ * `retry_after_ms` and sends the join again on its own; the socket stays open.
+ */
+export interface RateLimitedInfo {
+  reason?: string;
+  /** Time until the budget resets. Retrying earlier only spends another refusal. */
+  retry_after_ms?: number;
+  /** The budget that was exhausted, e.g. `ws_join`. */
+  category?: string;
+  code?: number;
+  /** The topic whose join was refused. Absent on an outbound-delivery throttle. */
+  topic?: string;
+  [key: string]: unknown;
+}
+
+/**
  * Maps the gateway lifecycle event names to their payload types. These are emitted on the
  * same emitter as data events but live in a separate namespace.
  *
@@ -366,8 +467,8 @@ export interface GatewayLifecycleMap {
   close: CloseInfo;
   /** An error occurred (connection rejection, decode failure, etc.). */
   error: Error;
-  /** A server `rate_limited` push was received. */
-  rateLimited: Record<string, unknown>;
+  /** A server `rate_limited` push was received, or a channel join was refused over budget. */
+  rateLimited: RateLimitedInfo;
   /** The presence map changed (after a `presence_state` or `presence_diff`). */
   presence: PresenceState;
 }

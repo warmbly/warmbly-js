@@ -1,6 +1,6 @@
 {
   "name": "warmbly",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "The official Warmbly SDK for JavaScript and TypeScript: REST API client, OAuth2 helper, and realtime gateway. Runs on Node, Bun, Deno, browsers, and the edge.",
   "type": "module",
   "license": "MIT",
@@ -65,7 +65,7 @@
     "check:publish": "publint",
     "prepublishOnly": "pnpm run build",
     "release": "changeset publish",
-    "version-packages": "changeset version"
+    "version-packages": "changeset version && node scripts/sync-version.mjs"
   },
   "engines": {
     "node": ">=20"

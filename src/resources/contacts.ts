@@ -1,6 +1,23 @@
 import { Page } from "../core/pagination";
 import type { ListResponse, RequestOptions } from "../core/types";
 import { APIResource } from "./base";
+import type { ImportColumnMapping } from "./lead-sync";
+
+/** An address verification verdict in Warmbly's vocabulary. */
+export type VerificationStatus = "valid" | "risky" | "invalid" | "unknown";
+
+/** How a contact came to exist. */
+export type ContactSource =
+  | "manual"
+  | "campaign"
+  | "import"
+  | "sheet_sync"
+  | "api"
+  | "form"
+  | "automation"
+  | "ai_assistant"
+  | "unknown"
+  | (string & {});
 
 /** A Warmbly contact. Documented-but-open shape. */
 export interface Contact {
@@ -11,6 +28,20 @@ export interface Contact {
   company?: string;
   phone?: string;
   custom_fields?: Record<string, string>;
+  subscribed?: boolean;
+  verification_status?: VerificationStatus | (string & {});
+  verification_sub_status?: string;
+  /** `probe`, `provider`, `imported`, `manual`, or empty when never checked. */
+  verification_source?: string;
+  verification_provider?: string;
+  verification_reason?: string;
+  verification_checked_at?: string | null;
+  /** 0..100, scored from the check plus what real mail to the address showed. */
+  verification_confidence?: number;
+  /** First-touch attribution, fixed at creation. */
+  source?: ContactSource;
+  source_detail?: string;
+  first_seen_at?: string;
   created_at?: string;
   updated_at?: string;
   [key: string]: unknown;
@@ -25,7 +56,15 @@ export interface AddContactParams {
   phone?: string;
   campaigns?: string[];
   categories?: string[];
+  /** Segments to pin the contact into as a manual include override. */
+  segments?: string[];
   custom_fields?: Record<string, string>;
+  /** Marketing consent. Omit to default a new contact to subscribed. */
+  subscribed?: boolean;
+  /** A verdict you already hold, in Warmbly's vocabulary or any known service's. */
+  verification_status?: string;
+  /** The vocabulary `verification_status` is written in, e.g. `zerobounce`. */
+  verification_provider?: string;
   [key: string]: unknown;
 }
 
@@ -153,11 +192,155 @@ export interface BatchResearchParams extends ResearchParams {
   contact_ids: string[];
 }
 
+/** A contact's derived status inside one campaign. */
+export type LeadStatus =
+  | "pending"
+  | "active"
+  | "completed"
+  | "replied"
+  | "bounced"
+  | "failed"
+  | "undeliverable"
+  | "unsubscribed";
+
+/** An engagement filter inside one campaign. `opened` means a human open. */
+export type LeadEngagement =
+  | "opened"
+  | "not_opened"
+  | "clicked"
+  | "not_clicked"
+  | "replied"
+  | "not_replied"
+  | "bounced";
+
 /** Query/body for searching contacts. */
 export interface ContactSearchParams {
   cursor?: string;
   limit?: number;
   query?: string;
+  /** Scope to campaigns. `lead_status` and `engagement` need exactly one entry. */
+  campaign_ids?: string[];
+  /** Filter to one derived lead status inside the one campaign in `campaign_ids`. */
+  lead_status?: LeadStatus;
+  /** Filter by engagement inside the one campaign in `campaign_ids`. */
+  engagement?: LeadEngagement;
+  /** The contact must be a member of every listed segment. */
+  segment_ids?: string[];
+  verification_status?: VerificationStatus;
+  [key: string]: unknown;
+}
+
+/** Who checks this workspace's addresses and the contacts by verdict. */
+export interface ContactVerificationOverview {
+  provider: "builtin" | "millionverifier" | (string & {});
+  connection_id?: string;
+  /** The connected service's remaining balance. */
+  credits?: number;
+  /** Set when the service is connected but unusable, in which case the built-in check runs. */
+  provider_error?: string;
+  builtin_ready?: boolean;
+  counts?: {
+    valid?: number;
+    risky?: number;
+    invalid?: number;
+    unknown?: number;
+    /** The share of `unknown` nobody has checked yet. */
+    pending?: number;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+/** Body for {@link Contacts.requestVerification}. At least one contact must be selected. */
+export interface ContactVerificationParams {
+  /** `verify` queues a re-check; the other two record a manual verdict. */
+  action: "verify" | "mark_deliverable" | "mark_undeliverable";
+  /** Contact ids, up to the bulk maximum per request. */
+  contacts?: string[];
+  /** Instead of, or as well as, `contacts`: every lead of this campaign that verification refused. */
+  campaign_id?: string;
+  [key: string]: unknown;
+}
+
+/** The result of {@link Contacts.requestVerification}. */
+export interface ContactVerificationResult {
+  affected: number;
+  action: string;
+  /** True when a re-check was queued rather than a verdict recorded. */
+  queued?: boolean;
+  [key: string]: unknown;
+}
+
+/** A contact's progress on one step of a campaign flow. */
+export interface ContactCampaignStep {
+  id: string;
+  label?: string;
+  kind?: string;
+  position?: number;
+  subject?: string;
+  sent_at?: string;
+  opened_at?: string;
+  clicked_at?: string;
+  replied_at?: string;
+  bounced_at?: string;
+  failed_at?: string;
+  attempts?: number;
+  in_flight?: boolean;
+  [key: string]: unknown;
+}
+
+/** A contact's state inside one campaign, with what happens next derived on read. */
+export interface ContactCampaignState {
+  campaign_id: string;
+  campaign_name?: string;
+  campaign_status?: string;
+  lead_status?: LeadStatus | (string & {});
+  steps?: ContactCampaignStep[];
+  completed_steps?: number;
+  total_steps?: number;
+  current_step?: ContactCampaignStep;
+  last_action?: string;
+  last_action_at?: string;
+  /** Absent once the flow has ended for the contact; see `ended_reason`. */
+  next?: {
+    step_id?: string;
+    step_label?: string;
+    kind?: string;
+    subject?: string;
+    state?: "due" | "waiting" | "paused" | "blocked" | (string & {});
+    scheduled_at?: string;
+    not_before?: string;
+    constraint?: string;
+    reason?: string;
+    [key: string]: unknown;
+  };
+  ended_reason?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Body for {@link Contacts.importPreview} and {@link Contacts.importCommit}. The
+ * mapping shape is shared with lead sync.
+ */
+export interface ContactImportParams {
+  /** The uploaded file to read. */
+  upload_id?: string;
+  /** Column mappings. Exactly one column must map to `email`. */
+  mapping?: ImportColumnMapping[];
+  /** Segments to pin imported contacts into, as a manual include override. */
+  segment_ids?: string[];
+  [key: string]: unknown;
+}
+
+/** A segment as seen from one contact: whether it is a member, and any override. */
+export interface ContactSegmentMembership {
+  id: string;
+  name?: string;
+  color?: string;
+  /** Whether the contact is in the segment right now. */
+  member: boolean;
+  /** The manual override, when any. */
+  mode?: "include" | "exclude";
   [key: string]: unknown;
 }
 
@@ -237,20 +420,28 @@ export class Contacts extends APIResource {
   }
 
   /**
-   * Previews a contacts import without committing it.
+   * Previews a contacts import without committing it: parses the file and suggests a
+   * column mapping, including a `quality` read on the addresses themselves.
    * @example
    * const preview = await warmbly.contacts.importPreview({ upload_id: "u_1" });
    */
-  importPreview(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+  importPreview(params: ContactImportParams): Promise<Record<string, unknown>> {
     return this.http.post<Record<string, unknown>>("contacts/import/preview", { body: params });
   }
 
   /**
-   * Commits a previously previewed contacts import.
+   * Commits a previously previewed contacts import with the mapping you chose. Capped at
+   * 50,000 rows and gated on `BULK_CONTACTS`, since one call writes the lot. A bad
+   * mapping (no `email` column, an unusable custom-field name) is a 400 on the whole
+   * request, raised before any row is written.
    * @example
-   * await warmbly.contacts.importCommit({ upload_id: "u_1" });
+   * await warmbly.contacts.importCommit({
+   *   upload_id: "u_1",
+   *   mapping: [{ index: 0, target: "email" }],
+   *   segment_ids: ["seg_1"],
+   * });
    */
-  importCommit(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+  importCommit(params: ContactImportParams): Promise<Record<string, unknown>> {
     return this.http.post<Record<string, unknown>>("contacts/import/commit", { body: params });
   }
 
@@ -321,12 +512,56 @@ export class Contacts extends APIResource {
   }
 
   /**
+   * Reports which verifier checks this workspace's addresses and the contacts by verdict.
+   * @example
+   * const { provider, counts } = await warmbly.contacts.verification();
+   */
+  verification(opts?: RequestOptions): Promise<ContactVerificationOverview> {
+    return this.http.get<ContactVerificationOverview>("contacts/verification", opts);
+  }
+
+  /**
+   * Queues a fresh address check of the listed contacts, or records a manual verdict on
+   * them. Marking leads deliverable resumes any campaign paused for verification.
+   * Requires `BULK_CONTACTS`.
+   * @example
+   * await warmbly.contacts.requestVerification({ action: "verify", campaign_id: "camp_1" });
+   */
+  requestVerification(params: ContactVerificationParams): Promise<ContactVerificationResult> {
+    return this.http.post<ContactVerificationResult>("contacts/verification", { body: params });
+  }
+
+  /**
    * Retrieves a contact by id.
    * @example
    * const c = await warmbly.contacts.get("c_1");
    */
   get(id: string, opts?: RequestOptions): Promise<Contact> {
     return this.http.get<Contact>(this.path("contacts", id), opts);
+  }
+
+  /**
+   * Returns, for every campaign the contact is a lead of, its progress on each step,
+   * the derived lead status, and what happens next.
+   * @example
+   * for (const state of await warmbly.contacts.campaigns("c_1")) console.log(state.next?.state);
+   */
+  campaigns(id: string, opts?: RequestOptions): Promise<ContactCampaignState[]> {
+    return this.http
+      .get<{ data: ContactCampaignState[] }>(this.path("contacts", id, "campaigns"), opts)
+      .then((r) => r.data ?? []);
+  }
+
+  /**
+   * Returns every segment in the organization with whether the contact is a member
+   * right now and its manual override, when any.
+   * @example
+   * const inSegments = (await warmbly.contacts.segments("c_1")).filter((s) => s.member);
+   */
+  segments(id: string, opts?: RequestOptions): Promise<ContactSegmentMembership[]> {
+    return this.http
+      .get<{ data: ContactSegmentMembership[] }>(this.path("contacts", id, "segments"), opts)
+      .then((r) => r.data ?? []);
   }
 
   /**
@@ -359,11 +594,15 @@ export class Contacts extends APIResource {
   }
 
   /**
-   * Returns the activity timeline for a contact.
+   * Returns the merged activity feed for a contact. Paginate by passing
+   * `pagination.next_cursor` back as `cursor` until `has_more` is false.
    * @example
-   * const timeline = await warmbly.contacts.timeline("c_1");
+   * const timeline = await warmbly.contacts.timeline("c_1", { limit: 100 });
    */
-  timeline(id: string, params?: Record<string, unknown>): Promise<Record<string, unknown>> {
+  timeline(
+    id: string,
+    params?: { limit?: number; cursor?: string; [key: string]: unknown },
+  ): Promise<Record<string, unknown>> {
     return this.http.get<Record<string, unknown>>(this.path("contacts", id, "timeline"), {
       query: params,
     });

@@ -200,11 +200,13 @@ export enum GatewayCloseCode {
   NOT_AUTHENTICATED = 4003,
   /** The token was expired or invalid; re-mint and reconnect. */
   AUTH_FAILED = 4004,
-  /** The connection was rate limited; back off before retrying. */
+  /** A malformed topic, for example an id that is not a UUID. Retrying will not help. */
+  MALFORMED_TOPIC = 4005,
+  /** Rate limited; wait out `retry_after_ms` before retrying. */
   RATE_LIMITED = 4007,
   /** The per-user or per-IP connection limit was exceeded; reduce sockets. */
   CONNECTION_LIMIT = 4009,
-  /** Permission denied, or the source IP is not on the allowlist. */
+  /** Permission denied, not a member, no such record, or the source IP is not allowed. */
   PERMISSION_DENIED = 4010,
 }
 
@@ -216,6 +218,7 @@ export function isRejectionCloseCode(code: number | undefined): code is GatewayC
   return (
     code === GatewayCloseCode.NOT_AUTHENTICATED ||
     code === GatewayCloseCode.AUTH_FAILED ||
+    code === GatewayCloseCode.MALFORMED_TOPIC ||
     code === GatewayCloseCode.RATE_LIMITED ||
     code === GatewayCloseCode.CONNECTION_LIMIT ||
     code === GatewayCloseCode.PERMISSION_DENIED
@@ -229,12 +232,14 @@ export function describeCloseCode(code: number | undefined): string {
       return "not authenticated: no token was supplied";
     case GatewayCloseCode.AUTH_FAILED:
       return "auth failed: token expired or invalid";
+    case GatewayCloseCode.MALFORMED_TOPIC:
+      return "malformed topic: fix the channel id, retrying will not help";
     case GatewayCloseCode.RATE_LIMITED:
-      return "rate limited: back off before reconnecting";
+      return "rate limited: wait out retry_after_ms before retrying";
     case GatewayCloseCode.CONNECTION_LIMIT:
       return "connection limit exceeded: reduce the number of sockets";
     case GatewayCloseCode.PERMISSION_DENIED:
-      return "permission denied: grant REALTIME_SUBSCRIBE or fix the IP allowlist";
+      return "permission denied: not a member or no such record, or grant REALTIME_SUBSCRIBE or fix the IP allowlist";
     default:
       return code !== undefined ? `closed with code ${code}` : "closed";
   }

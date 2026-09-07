@@ -23,6 +23,14 @@ describe("WARMBLY_EVENTS", () => {
     expect(names).toContain("CUSTOM_EVENT");
   });
 
+  it("includes the continuous-campaign, sync-state, form, and page-hit events", () => {
+    const names = Object.keys(WARMBLY_EVENTS);
+    expect(names).toContain("CAMPAIGN_IDLE");
+    expect(names).toContain("ACCOUNT_SYNC_STATE");
+    expect(names).toContain("FORM_SUBMISSION_CREATED");
+    expect(names).toContain("PAGE_HIT");
+  });
+
   it("includes the AI and billing event families", () => {
     const names = Object.keys(WARMBLY_EVENTS);
     expect(names).toContain("AI_DRAFT_READY");

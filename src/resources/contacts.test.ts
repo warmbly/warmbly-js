@@ -369,3 +369,89 @@ describe("Contacts", () => {
     expect(JSON.parse(String(init.body))).toEqual({ contact_ids: ["c_1", "c_2"] });
   });
 });
+
+// Single-response helpers for the sections below, built on the sequence helper above.
+function clientWith(
+  body: unknown,
+  init: { status?: number } = {},
+): { http: HttpClient; fetchMock: ReturnType<typeof vi.fn> } {
+  return clientWithSequence([{ body, status: init.status }]);
+}
+
+function lastCall(fetchMock: ReturnType<typeof vi.fn>): { url: string; init: RequestInit } {
+  return callAt(fetchMock, fetchMock.mock.calls.length - 1);
+}
+
+describe("Contacts: verification, campaign state, segments, search filters", () => {
+  it("verification GETs /contacts/verification", async () => {
+    const { http, fetchMock } = clientWith({ provider: "builtin", counts: { valid: 5 } });
+    const out = await new Contacts(http).verification();
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("GET");
+    expect(url).toMatch(/\/contacts\/verification$/);
+    expect(out.counts?.valid).toBe(5);
+  });
+
+  it("requestVerification POSTs the action to /contacts/verification", async () => {
+    const { http, fetchMock } = clientWith({ affected: 12, action: "verify", queued: true });
+    const out = await new Contacts(http).requestVerification({
+      action: "verify",
+      campaign_id: "camp1",
+    });
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("POST");
+    expect(url).toMatch(/\/contacts\/verification$/);
+    expect(JSON.parse(String(init.body))).toEqual({ action: "verify", campaign_id: "camp1" });
+    expect(out.affected).toBe(12);
+  });
+
+  it("campaigns GETs /contacts/:id/campaigns and unwraps data", async () => {
+    const { http, fetchMock } = clientWith({
+      data: [{ campaign_id: "camp1", lead_status: "active", next: { state: "waiting" } }],
+    });
+    const out = await new Contacts(http).campaigns("c1");
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("GET");
+    expect(url).toContain("/contacts/c1/campaigns");
+    expect(out[0]?.next?.state).toBe("waiting");
+  });
+
+  it("segments GETs /contacts/:id/segments and unwraps data", async () => {
+    const { http, fetchMock } = clientWith({
+      data: [{ id: "seg1", member: true, mode: "include" }],
+    });
+    const out = await new Contacts(http).segments("c1");
+    expect(lastCall(fetchMock).url).toContain("/contacts/c1/segments");
+    expect(out[0]?.member).toBe(true);
+  });
+
+  it("search sends the segment, lead status, and engagement filters in the body", async () => {
+    const { http, fetchMock } = clientWith({
+      data: [],
+      pagination: { total: 0, next_cursor: null, has_more: false },
+    });
+    await new Contacts(http).search({
+      campaign_ids: ["camp1"],
+      lead_status: "replied",
+      engagement: "opened",
+      segment_ids: ["seg1"],
+      verification_status: "valid",
+    });
+    expect(JSON.parse(String(lastCall(fetchMock).init.body))).toEqual({
+      campaign_ids: ["camp1"],
+      lead_status: "replied",
+      engagement: "opened",
+      segment_ids: ["seg1"],
+      verification_status: "valid",
+    });
+  });
+
+  it("timeline passes limit and cursor as query params", async () => {
+    const { http, fetchMock } = clientWith({ data: [], has_more: false });
+    await new Contacts(http).timeline("c1", { limit: 100, cursor: "abc" });
+    const { url } = lastCall(fetchMock);
+    expect(url).toContain("/contacts/c1/timeline");
+    expect(url).toContain("limit=100");
+    expect(url).toContain("cursor=abc");
+  });
+});

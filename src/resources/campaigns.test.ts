@@ -232,6 +232,8 @@ describe("Campaigns", () => {
     expect(form.get("file")).toBeInstanceOf(Blob);
     expect(form.get("step_id")).toBeNull();
     expect(headerOf(init, "content-type")).toBeUndefined();
+    // A non-spec FormData would stringify an omitted filename into a file named "undefined".
+    expect((form.get("file") as File).name).not.toBe("undefined");
   });
 
   it("deletes an attachment", async () => {
@@ -363,5 +365,85 @@ describe("Campaigns", () => {
     const { url, init } = lastCall(fetchMock);
     expect(init.method).toBe("POST");
     expect(url).toContain("/campaigns/c1/tracking-domain/verify");
+  });
+});
+
+describe("Campaigns: estimate, duplicate, forms, segments, start options", () => {
+  it("estimate POSTs the audience to /campaigns-estimate", async () => {
+    const { http, fetchMock } = clientWith({ recipients: 1000, mailboxes: 4, sending_days: 5 });
+    const out = await new Campaigns(http).estimate({ segment_ids: ["seg1"], daily_limit: 40 });
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("POST");
+    expect(url).toMatch(/\/campaigns-estimate$/);
+    expect(JSON.parse(String(init.body))).toEqual({ segment_ids: ["seg1"], daily_limit: 40 });
+    expect(out.recipients).toBe(1000);
+  });
+
+  it("duplicate POSTs /campaigns/:id/duplicate with an optional name", async () => {
+    const { http, fetchMock } = clientWith({ id: "camp2", status: "draft" }, { status: 201 });
+    const out = await new Campaigns(http).duplicate("camp1", { name: "Copy" });
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("POST");
+    expect(url).toContain("/campaigns/camp1/duplicate");
+    expect(JSON.parse(String(init.body))).toEqual({ name: "Copy" });
+    expect(out.id).toBe("camp2");
+  });
+
+  it("duplicate sends no body when no params are given", async () => {
+    const { http, fetchMock } = clientWith({ id: "camp2" }, { status: 201 });
+    await new Campaigns(http).duplicate("camp1");
+    expect(lastCall(fetchMock).init.body).toBeUndefined();
+  });
+
+  it("forms GETs /campaigns/:id/forms and unwraps data", async () => {
+    const { http, fetchMock } = clientWith({ data: [{ form_id: "f1", submissions: 3 }] });
+    const out = await new Campaigns(http).forms("camp1");
+    expect(lastCall(fetchMock).url).toContain("/campaigns/camp1/forms");
+    expect(out[0]?.submissions).toBe(3);
+  });
+
+  it("listSegments GETs /campaigns/:id/segments and unwraps data", async () => {
+    const { http, fetchMock } = clientWith({ data: [{ segment_id: "seg1", lead_count: 9 }] });
+    const out = await new Campaigns(http).listSegments("camp1");
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("GET");
+    expect(url).toContain("/campaigns/camp1/segments");
+    expect(out[0]?.lead_count).toBe(9);
+  });
+
+  it("setSegments PUTs segment_ids to /campaigns/:id/segments", async () => {
+    const { http, fetchMock } = clientWith({ data: [{ segment_id: "seg1" }], added: 397 });
+    const out = await new Campaigns(http).setSegments("camp1", ["seg1", "seg2"]);
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("PUT");
+    expect(url).toContain("/campaigns/camp1/segments");
+    expect(JSON.parse(String(init.body))).toEqual({ segment_ids: ["seg1", "seg2"] });
+    expect(out.added).toBe(397);
+  });
+
+  it("setSegments sends an explicit empty array to detach every segment", async () => {
+    const { http, fetchMock } = clientWith({ data: [], added: 0 });
+    await new Campaigns(http).setSegments("camp1", []);
+    expect(JSON.parse(String(lastCall(fetchMock).init.body))).toEqual({ segment_ids: [] });
+  });
+
+  it("start sends acknowledge_list_risk when given and no body otherwise", async () => {
+    const { http, fetchMock } = clientWith({ id: "camp1", status: "active" });
+    await new Campaigns(http).start("camp1");
+    expect(lastCall(fetchMock).init.body).toBeUndefined();
+    await new Campaigns(http).start("camp1", { acknowledge_list_risk: true });
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("POST");
+    expect(url).toContain("/campaigns/camp1/start");
+    expect(JSON.parse(String(init.body))).toEqual({ acknowledge_list_risk: true });
+  });
+
+  it("list passes the kind filter", async () => {
+    const { http, fetchMock } = clientWith({
+      data: [],
+      pagination: { total: 0, next_cursor: null, has_more: false },
+    });
+    await new Campaigns(http).list({ kind: "one_time" });
+    expect(lastCall(fetchMock).url).toContain("kind=one_time");
   });
 });

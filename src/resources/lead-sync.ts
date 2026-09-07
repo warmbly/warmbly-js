@@ -4,14 +4,28 @@ import { APIResource } from "./base";
 /** What happens when an incoming row's email matches an existing contact. */
 export type ImportDedupStrategy = "skip" | "update" | "create_duplicate";
 
-/** Maps one spreadsheet column onto a contact field. */
+/** Maps one spreadsheet or CSV column onto a contact field. */
 export interface ImportColumnMapping {
   /** The column's zero-based position in the sheet. */
   index: number;
-  /** The contact field to write, or `"custom:<key>"` for a custom field. */
+  /**
+   * The contact field to write: `ignore`, `email`, `first_name`, `last_name`,
+   * `company`, `phone`, `subscribed`, `categories`, `verification_status`, or
+   * `custom` with the name in `custom_key`. `custom:<key>` is the older spelling and
+   * is still accepted. Exactly one column must map to `email`.
+   */
   target: string;
-  /** The custom-field key, split out so clients need not parse `target`. */
+  /**
+   * The custom-field key, split out so clients need not parse `target`. May use
+   * letters, numbers, underscores, spaces, and dashes; anything else is a 400.
+   */
   custom_key?: string;
+  /**
+   * On a `verification_status` column, the service whose vocabulary the cells are
+   * written in (`zerobounce`, `millionverifier`, ...). Omit to recognise them
+   * value by value.
+   */
+  verification_provider?: string;
   [key: string]: unknown;
 }
 
