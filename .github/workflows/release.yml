@@ -68,8 +68,17 @@ jobs:
         if: ${{ inputs.already_versioned }}
         run: |
           version="$(jq -r .version package.json)"
-          if npm view "warmbly@${version}" version >/dev/null 2>&1; then
+          errors="$(mktemp)"
+          trap 'rm -f "$errors"' EXIT
+          # npm view exits non-zero both for "no such version" and for a lookup that never
+          # got an answer, so match E404 rather than the status. Treating a registry outage
+          # as "not published" would fail open on the last check before an irreversible publish.
+          if npm view "warmbly@${version}" version >/dev/null 2>"$errors"; then
             echo "::error::warmbly@${version} is already on npm. Bump the version before releasing."
+            exit 1
+          elif ! grep -q 'E404' "$errors"; then
+            cat "$errors" >&2
+            echo "::error::Could not confirm whether warmbly@${version} is published; refusing to release."
             exit 1
           fi
           echo "Releasing the version already committed: warmbly@${version}"
