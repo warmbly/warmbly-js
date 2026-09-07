@@ -132,6 +132,14 @@ describe("Forms", () => {
     expect(out.logo_url).toBe("https://cdn/x.png");
   });
 
+  it("uploadAsset omits the filename argument when none is given", async () => {
+    // A non-spec FormData would stringify an omitted filename into a file named "undefined".
+    const { http, fetchMock } = clientWith({ id: "f1" });
+    await new Forms(http).uploadAsset("f1", "cover", new Blob(["x"], { type: "image/png" }));
+    const file = ((lastCall(fetchMock).init.body as FormData).get("file") as File).name;
+    expect(file).not.toBe("undefined");
+  });
+
   it("deleteAsset DELETEs /forms/:id/assets/:kind and returns the form", async () => {
     const { http, fetchMock } = clientWith({ id: "f1", cover_url: "" });
     const out = await new Forms(http).deleteAsset("f1", "cover");

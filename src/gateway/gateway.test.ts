@@ -1251,6 +1251,20 @@ describe("Gateway join rate limiting", () => {
     expect(socket.frames().filter((f) => f[2] === "campaign:camp_1").length).toBe(1);
   });
 
+  it("does not reconnect after a malformed-topic close", async () => {
+    vi.useFakeTimers();
+    const gw = new Gateway({ orgId: "org_1", token: "t", webSocket: FakeCtor });
+    const socket = await connectReady(gw);
+    const reconnecting = vi.fn();
+    gw.on("reconnecting", reconnecting);
+    socket.fire("close", { code: GatewayCloseCode.MALFORMED_TOPIC, reason: "bad topic" });
+    // Retrying cannot help: the topic itself has to change first.
+    vi.advanceTimersByTime(60_000);
+    expect(reconnecting).not.toHaveBeenCalled();
+    expect(FakeWebSocket.instances.length).toBe(1);
+    expect(gw.state).toBe("closed");
+  });
+
   it("reports a malformed-topic refusal as a final error", async () => {
     const gw = new Gateway({ orgId: "org_1", token: "t", webSocket: FakeCtor });
     const socket = await connectReady(gw);

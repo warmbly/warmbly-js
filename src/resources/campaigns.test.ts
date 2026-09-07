@@ -232,6 +232,8 @@ describe("Campaigns", () => {
     expect(form.get("file")).toBeInstanceOf(Blob);
     expect(form.get("step_id")).toBeNull();
     expect(headerOf(init, "content-type")).toBeUndefined();
+    // A non-spec FormData would stringify an omitted filename into a file named "undefined".
+    expect((form.get("file") as File).name).not.toBe("undefined");
   });
 
   it("deletes an attachment", async () => {

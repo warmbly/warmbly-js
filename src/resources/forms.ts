@@ -307,7 +307,11 @@ export class Forms extends APIResource {
     opts?: RequestOptions,
   ): Promise<Form> {
     const form = new FormData();
-    form.append("file", file, params?.filename);
+    // Append the filename only when there is one. Node, Bun and browsers all treat an
+    // explicit undefined third argument as absent, per WebIDL, but a non-spec FormData
+    // (React Native's, some polyfills) stringifies it into a file named "undefined".
+    if (params?.filename !== undefined) form.append("file", file, params.filename);
+    else form.append("file", file);
     return this.http.post<Form>(this.path("forms", id, "assets", kind), { ...opts, body: form });
   }
 

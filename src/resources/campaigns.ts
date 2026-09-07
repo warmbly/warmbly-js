@@ -534,7 +534,11 @@ export class Campaigns extends APIResource {
     opts?: RequestOptions,
   ): Promise<CampaignAttachment> {
     const form = new FormData();
-    form.append("file", file, params?.filename);
+    // Append the filename only when there is one. Node, Bun and browsers all treat an
+    // explicit undefined third argument as absent, per WebIDL, but a non-spec FormData
+    // (React Native's, some polyfills) stringifies it into a file named "undefined".
+    if (params?.filename !== undefined) form.append("file", file, params.filename);
+    else form.append("file", file);
     if (params?.step_id !== undefined) form.append("step_id", params.step_id);
     return this.http.post<CampaignAttachment>(this.path("campaigns", id, "attachments"), {
       ...opts,

@@ -558,8 +558,13 @@ export class Gateway {
       return;
     }
 
-    // A permission-denied or connection-limit close will not succeed on a blind retry.
-    if (code === GatewayCloseCode.PERMISSION_DENIED || code === GatewayCloseCode.CONNECTION_LIMIT) {
+    // These will not succeed on a blind retry: the permission, the socket count and the
+    // topic itself all have to change first, so reconnecting just spends the budget.
+    if (
+      code === GatewayCloseCode.PERMISSION_DENIED ||
+      code === GatewayCloseCode.CONNECTION_LIMIT ||
+      code === GatewayCloseCode.MALFORMED_TOPIC
+    ) {
       this.setState("closed");
       return;
     }

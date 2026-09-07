@@ -81,6 +81,14 @@
     stable codes (`list_bounce_risk`, `leads_undeliverable`, `mailbox_allowance_reached`,
     `storage_limit_reached`, and the rest).
 
+  Signature change to watch for:
+
+  - **`campaigns.start(id, params?, opts?)`** takes the request body as its second argument;
+    per-request options moved to a third. `StartCampaignParams` is an open shape, so a call
+    that passed `{ timeout }` or `{ maxRetries }` as the second argument still compiles and
+    now sends those keys in the body instead of applying them. Move them to the third
+    argument: `campaigns.start(id, undefined, { timeout: 5000 })`.
+
   Release plumbing:
 
   - The `VERSION` constant the User-Agent is built from had drifted: 0.2.0 shipped announcing
