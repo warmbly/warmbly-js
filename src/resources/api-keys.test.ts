@@ -216,3 +216,21 @@ describe("ApiKeys", () => {
     await expect(new ApiKeys(http).get("nope")).rejects.toBeInstanceOf(NotFoundError);
   });
 });
+
+describe("ApiKeys.revokeSelf", () => {
+  it("DELETEs /api-keys/self with an optional reason", async () => {
+    const { http, fetchMock } = clientWith({ status: "revoked" });
+    const out = await new ApiKeys(http).revokeSelf("laptop returned");
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("DELETE");
+    expect(url).toContain("/api-keys/self");
+    expect(url).toContain("reason=laptop%20returned");
+    expect(out.status).toBe("revoked");
+  });
+
+  it("omits the reason query when none is given", async () => {
+    const { http, fetchMock } = clientWith({ status: "revoked" });
+    await new ApiKeys(http).revokeSelf();
+    expect(lastCall(fetchMock).url).toMatch(/\/api-keys\/self$/);
+  });
+});

@@ -216,6 +216,8 @@ describe("WEBHOOK_EVENTS catalog", () => {
     expect(names).toContain("meeting.booked");
     expect(names).toContain("crm.deal_created");
     expect(names).toContain("lead_sync_source.updated");
+    expect(names).toContain("contact.created");
+    expect(names).toContain("form.submitted");
     expect(names).toContain("custom.event");
     expect(names).toContain("webhook.test");
   });

@@ -9,6 +9,7 @@ import { OAuthApplications } from "./oauth/applications";
 import { OAuthClient } from "./oauth/oauth";
 import {
   Advisor,
+  AgentTools,
   AISkills,
   Analytics,
   ApiKeys,
@@ -17,11 +18,14 @@ import {
   Contacts,
   Crm,
   Emails,
+  Forms,
   Generation,
   Integrations,
   LeadSync,
   Meetings,
   Misc,
+  Segments,
+  Suppressions,
   Templates,
   Unibox,
   Webhooks,
@@ -154,6 +158,10 @@ describe("Warmbly construction", () => {
     expect(warmbly.apiKeys).toBeInstanceOf(ApiKeys);
     expect(warmbly.campaigns).toBeInstanceOf(Campaigns);
     expect(warmbly.contacts).toBeInstanceOf(Contacts);
+    expect(warmbly.segments).toBeInstanceOf(Segments);
+    expect(warmbly.forms).toBeInstanceOf(Forms);
+    expect(warmbly.suppressions).toBeInstanceOf(Suppressions);
+    expect(warmbly.agentTools).toBeInstanceOf(AgentTools);
     expect(warmbly.emails).toBeInstanceOf(Emails);
     expect(warmbly.unibox).toBeInstanceOf(Unibox);
     expect(warmbly.analytics).toBeInstanceOf(Analytics);

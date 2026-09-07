@@ -36,7 +36,10 @@ WARMBLY_API_KEY=wmbly_... npx tsx examples/rest.ts
 | --- | --- |
 | [`campaigns.ts`](./campaigns.ts) | Campaign lifecycle: create, steps, start/stop, logs, test email |
 | [`contacts.ts`](./contacts.ts) | Add, search, lookup, notes, timeline, bulk update, export |
+| [`segments-and-forms.ts`](./segments-and-forms.ts) | Live audiences, campaign estimates and linked segments, hosted forms, personalized links |
+| [`suppressions-and-agent-tools.ts`](./suppressions-and-agent-tools.ts) | The suppression list, and the tool registry for function-calling agents |
 | [`mailboxes-warmup.ts`](./mailboxes-warmup.ts) | Email accounts, warmup controls, verification, sending |
+| [`mailbox-controls.ts`](./mailbox-controls.ts) | Allowance, tracking domain, auth check, hold/release, sending behaviour, sync state |
 | [`unibox.ts`](./unibox.ts) | Unified inbox: threads, replies, labels, snoozes, scheduled |
 | [`compose-and-ai-drafts.ts`](./compose-and-ai-drafts.ts) | Mailbox scoring, composing new mail, AI drafts, autosave, the inbox agent queue |
 | [`analytics.ts`](./analytics.ts) | Dashboard, deliverability, warmup, and campaign analytics |
@@ -53,6 +56,7 @@ WARMBLY_API_KEY=wmbly_... npx tsx examples/rest.ts
 | --- | --- |
 | [`oauth-app-management.ts`](./oauth-app-management.ts) | Create and manage OAuth apps, secrets, webhook endpoints |
 | [`oauth-auto-refresh.ts`](./oauth-auto-refresh.ts) | Full PKCE flow plus an auto-refreshing token provider |
+| [`device-auth.ts`](./device-auth.ts) | Device-code sign-in for a tool with no credential yet, and self-revocation |
 
 ## Realtime gateway
 

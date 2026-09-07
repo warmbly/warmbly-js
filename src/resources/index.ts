@@ -14,6 +14,13 @@ export type {
 } from "./advisor";
 export { Advisor } from "./advisor";
 export type {
+  AgentTool,
+  AgentToolResult,
+  JsonSchema,
+  OpenAIFunctionTool,
+} from "./agent-tools";
+export { AgentTools } from "./agent-tools";
+export type {
   AISkill,
   CreateAISkillParams,
   UpdateAISkillParams,
@@ -54,27 +61,49 @@ export type {
   Campaign,
   CampaignAbVariant,
   CampaignAttachment,
+  CampaignEstimate,
+  CampaignFormStats,
+  CampaignKind,
   CampaignLog,
+  CampaignSegmentLink,
   CampaignStep,
   CreateCampaignParams,
+  EstimateCampaignParams,
   ListCampaignsParams,
+  StartCampaignParams,
+  StepAction,
+  StepBranch,
+  StepBranchCondition,
+  StepKind,
   StepLayoutParams,
   StepPosition,
   UpdateCampaignParams,
+  UpdateCampaignStepParams,
 } from "./campaigns";
 export { Campaigns } from "./campaigns";
 export type {
   AddContactParams,
   BatchResearchParams,
   Contact,
+  ContactCampaignState,
+  ContactCampaignStep,
+  ContactImportParams,
   ContactNote,
   ContactResearchRun,
   ContactSearchParams,
+  ContactSegmentMembership,
+  ContactSource,
+  ContactVerificationOverview,
+  ContactVerificationParams,
+  ContactVerificationResult,
+  LeadEngagement,
+  LeadStatus,
   ResearchArtifact,
   ResearchHook,
   ResearchParams,
   ResearchResult,
   ResearchSignal,
+  VerificationStatus,
 } from "./contacts";
 export { Contacts } from "./contacts";
 export type {
@@ -87,11 +116,38 @@ export type {
 export { Crm } from "./crm";
 export type {
   BulkTagEmailsParams,
+  DailySendingPlan,
+  DomainAuthCheck,
   EmailAccount,
+  EmailSyncStatus,
   ListEmailsParams,
+  MailboxAllowance,
+  MailboxAllowanceBasis,
+  SendingBehavior,
+  SendRotationState,
+  TrackingDomainStatus,
+  TrackingDomainVerification,
+  UpdateEmailParams,
+  UpdateSendingBehaviorParams,
   WarmupAction,
 } from "./emails";
 export { Emails } from "./emails";
+export type {
+  Form,
+  FormAssetKind,
+  FormDesign,
+  FormField,
+  FormStats,
+  FormStatsBucket,
+  FormStatus,
+  FormSubmission,
+  FormSubmissionList,
+  FormsConfig,
+  FormsDomainStatus,
+  ListFormSubmissionsParams,
+  UpdateFormParams,
+} from "./forms";
+export { Forms } from "./forms";
 export type {
   AIVariableParams,
   EditParams,
@@ -125,10 +181,12 @@ export type {
 export { Meetings } from "./meetings";
 export type {
   AuditLogEntry,
+  AuthConfig,
   Category,
   DeliverabilityEventParams,
   DeliverabilityEventType,
   Folder,
+  GroupOrder,
   Identity,
   ListDeadLettersParams,
   Plan,
@@ -138,6 +196,31 @@ export type {
   WarmupRoutingRule,
 } from "./misc";
 export { Misc } from "./misc";
+export type {
+  CreateSegmentParams,
+  PreviewSegmentParams,
+  Segment,
+  SegmentAddToCampaignResult,
+  SegmentCondition,
+  SegmentField,
+  SegmentFieldKind,
+  SegmentMatch,
+  SegmentMemberMode,
+  SegmentOverride,
+  SetSegmentMembersParams,
+  UpdateSegmentParams,
+} from "./segments";
+export { Segments } from "./segments";
+export type {
+  AddSuppressionsParams,
+  AddSuppressionsResult,
+  ListSuppressionsParams,
+  Suppression,
+  SuppressionEntryInput,
+  SuppressionKind,
+  SuppressionSource,
+} from "./suppressions";
+export { Suppressions } from "./suppressions";
 export type { CreateTemplateParams, ListTemplatesParams, Template } from "./templates";
 export { Templates } from "./templates";
 export type {
@@ -151,8 +234,10 @@ export type {
   ComposeResult,
   DraftGrounding,
   ListUniboxParams,
+  MarkSeenParams,
   ReplyDraftParams,
   SaveComposeDraftParams,
+  UniboxFolder,
   UniboxItem,
   UniboxScheduledTask,
 } from "./unibox";

@@ -23,7 +23,11 @@ export const GatewayIntents = {
   EMAIL: "EMAIL",
   /** Contact events (`CONTACT_*`, `CONTACTS_RELOAD`). */
   CONTACT: "CONTACT",
-  /** Email account events (`ACCOUNT_*`). */
+  /** Hosted form events (`FORM_SUBMISSION_CREATED`). */
+  FORM: "FORM",
+  /** Website tracking events (`PAGE_HIT`). */
+  PAGE: "PAGE",
+  /** Email account events (`ACCOUNT_*`, including `ACCOUNT_SYNC_STATE`). */
   ACCOUNT: "ACCOUNT",
   /** Bulk operation events (`BULK_*`, `TASK_PROGRESS`). */
   BULK: "BULK",

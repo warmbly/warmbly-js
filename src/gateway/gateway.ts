@@ -10,7 +10,13 @@ import { GatewayError } from "../core/errors";
 import { fullJitterBackoff } from "../core/fetch";
 import { Connection, type PhoenixFrame } from "./connection";
 import { type AnyListener, type Listener, TypedEmitter, type Unsubscribe } from "./emitter";
-import type { CloseInfo, GatewayLifecycleMap, ReconnectingInfo, WarmblyEventMap } from "./events";
+import type {
+  CloseInfo,
+  GatewayLifecycleMap,
+  RateLimitedInfo,
+  ReconnectingInfo,
+  WarmblyEventMap,
+} from "./events";
 import { WARMBLY_EVENTS } from "./events";
 import { normalizeIntents } from "./intents";
 import { buildPresenceUpdate, PRESENCE_UPDATE_EVENT, PresenceTracker } from "./presence";
@@ -40,6 +46,9 @@ const DEFAULT_MAX_RECONNECT_DELAY_MS = 30_000;
 
 /** A normal WebSocket close: the consumer asked to stop, so no reconnect. */
 const NORMAL_CLOSE_CODE = 1000;
+
+/** How long to wait before re-sending a rate-limited join when the server gave no hint. */
+const DEFAULT_REJOIN_DELAY_MS = 5_000;
 
 /** The merged map of data events and lifecycle events the gateway emits. */
 type GatewayEventMap = WarmblyEventMap & GatewayLifecycleMap;
@@ -88,6 +97,8 @@ export class Gateway {
   private heartbeatTimer: ReturnType<typeof setTimeout> | undefined;
   private heartbeatPending = false;
   private reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Pending re-sends of joins the server refused over the join budget, by topic. */
+  private readonly rejoinTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   constructor(options: GatewayOptions = {}) {
     this.url = stripTrailingSlash(options.url ?? DEFAULT_GATEWAY_URL);
@@ -184,6 +195,7 @@ export class Gateway {
   close(): void {
     this.deliberatelyClosed = true;
     this.clearReconnectTimer();
+    this.clearRejoinTimers();
     this.stopHeartbeat();
     this.connection?.close(NORMAL_CLOSE_CODE, "client closed");
     this.connection = undefined;
@@ -366,7 +378,7 @@ export class Gateway {
     const response = (frame.payload.response ?? {}) as Record<string, unknown>;
 
     if (status === "error") {
-      this.handleJoinError(response);
+      this.handleJoinError(frame.topic, response);
       return;
     }
 
@@ -390,11 +402,17 @@ export class Gateway {
     this.emitter.emit("ready");
   }
 
-  /** Surfaces a post-join error reply (status "error") as a GatewayError or rate-limit. */
-  private handleJoinError(response: Record<string, unknown>): void {
+  /**
+   * Surfaces a post-join error reply (status "error"). A join refused over the join
+   * budget is not final: the socket stays open, so the join is re-sent once
+   * `retry_after_ms` has elapsed. Every other refusal is reported and not retried.
+   */
+  private handleJoinError(topic: string, response: Record<string, unknown>): void {
     const reason = typeof response.reason === "string" ? response.reason : undefined;
     if (reason === "rate_limited") {
-      this.emitter.emit("rateLimited", response);
+      const info: RateLimitedInfo = { ...response, topic };
+      this.emitter.emit("rateLimited", info);
+      this.scheduleRejoin(topic, info.retry_after_ms);
       return;
     }
     const code = typeof response.code === "number" ? response.code : undefined;
@@ -402,6 +420,33 @@ export class Gateway {
       "error",
       new GatewayError(reason ?? "Channel join was rejected.", { code, reason }),
     );
+  }
+
+  /** Re-sends a refused join after the server's `retry_after_ms`, replacing any pending one. */
+  private scheduleRejoin(topic: string, retryAfterMs: number | undefined): void {
+    const delayMs =
+      typeof retryAfterMs === "number" && retryAfterMs > 0 ? retryAfterMs : DEFAULT_REJOIN_DELAY_MS;
+    const pending = this.rejoinTimers.get(topic);
+    if (pending !== undefined) clearTimeout(pending);
+    this.logger?.warn?.(`Join of ${topic} was rate limited; rejoining in ${delayMs}ms.`);
+    this.rejoinTimers.set(
+      topic,
+      setTimeout(() => {
+        this.rejoinTimers.delete(topic);
+        if (this.deliberatelyClosed || !this.connection?.isOpen) return;
+        if (this.orgId && topic === ChannelTopic.org(this.orgId)) {
+          this.sendOrgJoin();
+          return;
+        }
+        this.connection.send(topic, "phx_join", {}, true);
+      }, delayMs),
+    );
+  }
+
+  /** Drops every pending rejoin; the socket they were meant for is gone. */
+  private clearRejoinTimers(): void {
+    for (const timer of this.rejoinTimers.values()) clearTimeout(timer);
+    this.rejoinTimers.clear();
   }
 
   /** Handles a `phx_error` frame on a channel. */
@@ -497,6 +542,7 @@ export class Gateway {
   /** Handles a socket close: emit lifecycle, surface rejection codes, then reconnect if appropriate. */
   private handleClose(code: number | undefined, reason: string | undefined): void {
     this.stopHeartbeat();
+    this.clearRejoinTimers();
     this.presenceTracker.reset();
     const info: CloseInfo = {};
     if (code !== undefined) info.code = code;

@@ -85,6 +85,10 @@ Contributors do not need to publish manually; just land a changeset with your ch
 
 Tick **dry run** to preview the version bump and changelog without committing or publishing.
 
+`pnpm version-packages` also rewrites the `VERSION` constant in `src/version.ts`, which the
+User-Agent is built from and which Changesets does not know about. Do not edit that constant by
+hand; `src/version.test.ts` fails the build if it ever disagrees with package.json.
+
 Publishing authenticates with npm trusted publishing (OIDC), so there is no npm token in this repo.
 Before the first release, a package owner must add the trusted publisher on npmjs.com: package
 Settings -> Trusted Publisher -> this repository, workflow file `release.yml`.

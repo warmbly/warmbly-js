@@ -215,3 +215,112 @@ describe("Emails", () => {
     });
   });
 });
+
+describe("Emails: allowance, tracking domain, hold/release, sync, auth check, behaviour", () => {
+  it("allowance GETs /emails/allowance", async () => {
+    const { http, fetchMock } = clientWith({ used: 3, allowance: 10, remaining: 7, basis: "free" });
+    const out = await new Emails(http).allowance();
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("GET");
+    expect(url).toMatch(/\/emails\/allowance$/);
+    expect(out.remaining).toBe(7);
+  });
+
+  it("getTrackingDomain GETs /emails/:id/track", async () => {
+    const { http, fetchMock } = clientWith({ cname_target: "t.warmbly.com", status: "pending" });
+    const out = await new Emails(http).getTrackingDomain("mb1");
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("GET");
+    expect(url).toMatch(/\/emails\/mb1\/track$/);
+    expect(out.status).toBe("pending");
+  });
+
+  it("verifyTrackingDomain POSTs /emails/:id/track/verify with no body", async () => {
+    const { http, fetchMock } = clientWith({ status: "verified" });
+    const out = await new Emails(http).verifyTrackingDomain("mb1");
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("POST");
+    expect(url).toContain("/emails/mb1/track/verify");
+    expect(init.body).toBeUndefined();
+    expect(out.status).toBe("verified");
+  });
+
+  it("hold POSTs /emails/:id/hold and returns the rotation state", async () => {
+    const { http, fetchMock } = clientWith({ state: "reserve", reason: "held back by its owner" });
+    const out = await new Emails(http).hold("mb1");
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("POST");
+    expect(url).toContain("/emails/mb1/hold");
+    expect(init.body).toBeUndefined();
+    expect(out.state).toBe("reserve");
+  });
+
+  it("release POSTs /emails/:id/release", async () => {
+    const { http, fetchMock } = clientWith({ state: "active" });
+    const out = await new Emails(http).release("mb1");
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("POST");
+    expect(url).toContain("/emails/mb1/release");
+    expect(out.state).toBe("active");
+  });
+
+  it("sync GETs /emails/:id/sync", async () => {
+    const { http, fetchMock } = clientWith({
+      state: { backfill_status: "complete" },
+      policy: { backfill_days: 30 },
+    });
+    const out = await new Emails(http).sync("mb1");
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("GET");
+    expect(url).toContain("/emails/mb1/sync");
+    expect(out.state?.backfill_status).toBe("complete");
+    expect(out.policy.backfill_days).toBe(30);
+  });
+
+  it("recordAuthCheck POSTs /emails/:id/auth-check with no body", async () => {
+    const { http, fetchMock } = clientWith({ spf: true, dmarc_inherited: true });
+    const out = await new Emails(http).recordAuthCheck("mb1");
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("POST");
+    expect(url).toContain("/emails/mb1/auth-check");
+    expect(init.body).toBeUndefined();
+    expect(out.dmarc_inherited).toBe(true);
+  });
+
+  it("getBehavior GETs /emails/:id/behavior", async () => {
+    const { http, fetchMock } = clientWith({ email_account_id: "mb1", enabled: true });
+    const out = await new Emails(http).getBehavior("mb1");
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("GET");
+    expect(url).toMatch(/\/emails\/mb1\/behavior$/);
+    expect(out.enabled).toBe(true);
+  });
+
+  it("updateBehavior PUTs the patch to /emails/:id/behavior", async () => {
+    const { http, fetchMock } = clientWith({ email_account_id: "mb1", daily_limit_min: 30 });
+    await new Emails(http).updateBehavior("mb1", { daily_limit_min: 30, daily_limit_max: 45 });
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("PUT");
+    expect(url).toMatch(/\/emails\/mb1\/behavior$/);
+    expect(JSON.parse(String(init.body))).toEqual({ daily_limit_min: 30, daily_limit_max: 45 });
+  });
+
+  it("behaviorPlan GETs /emails/:id/behavior/plan", async () => {
+    const { http, fetchMock } = clientWith({ email_account_id: "mb1", remaining_today: 12 });
+    const out = await new Emails(http).behaviorPlan("mb1");
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("GET");
+    expect(url).toContain("/emails/mb1/behavior/plan");
+    expect(out.remaining_today).toBe(12);
+  });
+
+  it("update passes save_to_sent and timezone through", async () => {
+    const { http, fetchMock } = clientWith({ id: "mb1" });
+    await new Emails(http).update("mb1", { save_to_sent: false, timezone: "America/Denver" });
+    const { init } = lastCall(fetchMock);
+    expect(JSON.parse(String(init.body))).toEqual({
+      save_to_sent: false,
+      timezone: "America/Denver",
+    });
+  });
+});

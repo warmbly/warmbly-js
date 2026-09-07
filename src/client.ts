@@ -13,6 +13,7 @@ import { OAuthApplications } from "./oauth/applications";
 import { OAuthClient } from "./oauth/oauth";
 import {
   Advisor,
+  AgentTools,
   AISkills,
   Analytics,
   ApiKeys,
@@ -21,11 +22,14 @@ import {
   Contacts,
   Crm,
   Emails,
+  Forms,
   Generation,
   Integrations,
   LeadSync,
   Meetings,
   Misc,
+  Segments,
+  Suppressions,
   Templates,
   Unibox,
   Webhooks,
@@ -72,9 +76,15 @@ export class Warmbly {
   readonly apiKeys: ApiKeys;
   /** Campaigns, sequences, steps, A/B variants, attachments, and lifecycle. */
   readonly campaigns: Campaigns;
-  /** Contacts, notes, timelines, activities, import/export, and search. */
+  /** Contacts, notes, timelines, activities, import/export, verification, and search. */
   readonly contacts: Contacts;
-  /** Email accounts (mailboxes), warmup controls, and sending. */
+  /** Saved contact audiences: conditions plus manual overrides, evaluated live. */
+  readonly segments: Segments;
+  /** Hosted lead-capture forms, their submissions, statistics, and custom domain. */
+  readonly forms: Forms;
+  /** The workspace suppression list: addresses and domains no campaign will email. */
+  readonly suppressions: Suppressions;
+  /** Email accounts (mailboxes), warmup controls, sending behaviour, and sending. */
   readonly emails: Emails;
   /** The unified inbox: threads, replies, labels, snoozes, and scheduled sends. */
   readonly unibox: Unibox;
@@ -86,6 +96,8 @@ export class Warmbly {
   readonly generation: Generation;
   /** Organization playbooks every AI surface follows. */
   readonly aiSkills: AISkills;
+  /** The AI tool registry over plain HTTP, for function-calling agents without MCP. */
+  readonly agentTools: AgentTools;
   /** Reply templates: render, score, duplicate, and reorder. */
   readonly templates: Templates;
   /** CRM pipelines, deals, task types, and tasks. */
@@ -100,7 +112,7 @@ export class Warmbly {
   readonly leadSync: LeadSync;
   /** Outbound webhook endpoints, deliveries, and event types. */
   readonly webhooks: Webhooks;
-  /** Caller identity, folders, tags, categories, teams, audit logs, outreach, deliverability ingestion, the task DLQ, warmup routing, plans, and timezones. */
+  /** Caller identity, deployment config, folders, tags, categories, teams, audit logs, outreach, deliverability ingestion, the task DLQ, warmup routing, plans, and timezones. */
   readonly misc: Misc;
   /** Manage your own OAuth applications (requires the `API_KEYS` scope). */
   readonly oauthApplications: OAuthApplications;
@@ -112,12 +124,16 @@ export class Warmbly {
     this.apiKeys = new ApiKeys(this.http);
     this.campaigns = new Campaigns(this.http);
     this.contacts = new Contacts(this.http);
+    this.segments = new Segments(this.http);
+    this.forms = new Forms(this.http);
+    this.suppressions = new Suppressions(this.http);
     this.emails = new Emails(this.http);
     this.unibox = new Unibox(this.http);
     this.analytics = new Analytics(this.http);
     this.advisor = new Advisor(this.http);
     this.generation = new Generation(this.http);
     this.aiSkills = new AISkills(this.http);
+    this.agentTools = new AgentTools(this.http);
     this.templates = new Templates(this.http);
     this.crm = new Crm(this.http);
     this.meetings = new Meetings(this.http);

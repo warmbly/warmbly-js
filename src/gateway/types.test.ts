@@ -40,6 +40,8 @@ describe("close codes", () => {
   it("describes each rejection code", () => {
     expect(describeCloseCode(GatewayCloseCode.NOT_AUTHENTICATED)).toContain("not authenticated");
     expect(describeCloseCode(GatewayCloseCode.PERMISSION_DENIED)).toContain("permission denied");
+    expect(describeCloseCode(GatewayCloseCode.MALFORMED_TOPIC)).toContain("malformed topic");
+    expect(GatewayCloseCode.MALFORMED_TOPIC).toBe(4005);
     expect(describeCloseCode(1006)).toContain("1006");
   });
 

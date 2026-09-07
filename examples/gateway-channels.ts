@@ -37,11 +37,18 @@ gw.on("ACCOUNT_DISCONNECTED", (e) => console.log("account disconnected:", e.acco
 gw.on("ACCOUNT_ERROR", (e) => console.log("account error:", e.account_id));
 gw.on("ACCOUNT_SYNCED", (e) => console.log("account synced:", e.account_id));
 gw.on("ACCOUNT_HEALTH_CHANGED", (e) => console.log("account health changed:", e.account_id));
+// A mailbox's import finished, or fair use started/stopped holding it.
+gw.on("ACCOUNT_SYNC_STATE", (e) => console.log("account sync:", e.account_id, e.status, e.reason));
 
 // Campaign lifecycle.
 gw.on("CAMPAIGN_STARTED", (e) => console.log("campaign started:", e.campaign_id));
 gw.on("CAMPAIGN_PAUSED", (e) => console.log("campaign paused:", e.campaign_id));
 gw.on("CAMPAIGN_COMPLETED", (e) => console.log("campaign completed:", e.campaign_id));
+// A continuous campaign ran out of leads and is waiting for more (it stays active).
+gw.on("CAMPAIGN_IDLE", (e) => console.log("campaign idle:", e.campaign_id));
+
+// A join refused over the join budget is re-sent automatically after retry_after_ms.
+gw.on("rateLimited", (info) => console.log("rate limited:", info.topic ?? "delivery", info.retry_after_ms));
 
 // Lifecycle hooks.
 gw.on("hello", (hello) => console.log("ready at seq", hello.seq));

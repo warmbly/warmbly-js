@@ -80,8 +80,13 @@ export interface RequestOptions {
 
 /** Cursor pagination metadata returned by every list endpoint. */
 export interface PaginationMeta {
-  /** Total number of matching records, or `null` when not computed. */
-  total: number | null;
+  /**
+   * Total number of matching records. `null` when the endpoint computes the envelope
+   * but not the count, and absent altogether on the endpoints that never count at all
+   * (the unibox, audit logs, campaign logs, webhook deliveries, suppressions). Always
+   * branch on `has_more` rather than on this.
+   */
+  total?: number | null;
   /** Opaque cursor for the next page, or `null` on the last page. */
   next_cursor: string | null;
   /** Whether another page is available. */

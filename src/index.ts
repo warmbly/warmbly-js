@@ -9,6 +9,8 @@
  * @packageDocumentation
  */
 
+// Device-code sign-in (the handshake behind `warmbly auth login`).
+export * from "./auth";
 // Top-level client.
 export { default, Warmbly, Warmbly as WarmblyClient } from "./client";
 export { resolveClientOptions } from "./core/config";

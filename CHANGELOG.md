@@ -1,5 +1,93 @@
 # Changelog
 
+## 0.3.0
+
+### Minor Changes
+
+- Cover the platform API surface added since the last sync (platform `50f50e68` through
+  `885a7c2a`). Every addition was verified against the backend route table, handlers, and
+  reference docs.
+
+  New namespaces:
+
+  - **`warmbly.segments`**: saved contact audiences with live counts. `list`, `fields`,
+    `preview`, CRUD, `setMembers`/`memberModes`/`overrides` for manual pins, and
+    `addToCampaign` for a one-time snapshot enrolment.
+  - **`warmbly.forms`**: hosted lead-capture forms. CRUD, `listSubmissions`/`deleteSubmission`,
+    `stats`, `mintLink` (personalized links, idempotent), `uploadAsset`/`deleteAsset`, and the
+    custom forms domain (`getDomain`/`setDomain`/`verifyDomain`).
+  - **`warmbly.suppressions`**: the workspace suppression list. `list` (paginated), `add`
+    (up to 5000 entries, safe to repeat), and `remove`.
+  - **`warmbly.agentTools`**: the AI tool registry over plain HTTP for function-calling agents
+    without MCP. `list` in the `warmbly`, `openai`, or `hermes` manifest format, and `call`.
+  - **`DeviceAuth`**: the device-code sign-in behind `warmbly auth login`. `start`, `poll`, and
+    `waitForApproval`, which polls at the server's interval and maps denial, expiry, and an
+    already-claimed code to a typed `DeviceAuthError`.
+
+  New methods on existing namespaces:
+
+  - **emails**: `allowance`, `getTrackingDomain`, `verifyTrackingDomain`, `recordAuthCheck`
+    (the write-scoped check that lifts the send gate), `hold`/`release`, `sync`, and the sending
+    behaviour profile (`getBehavior`, `updateBehavior`, `behaviorPlan`). `track` now returns the
+    full `TrackingDomainStatus`; `update` is typed with `save_to_sent` and `timezone`.
+  - **campaigns**: `estimate`, `duplicate`, `forms`, `listSegments`, `setSegments`. `start`
+    accepts `acknowledge_list_risk`. `Campaign` carries `kind`, `continuous`, and `idle_since`;
+    `CampaignAttachment.step_id` is `string | null`, as the API always serialises it.
+  - **contacts**: `verification`, `requestVerification`, `campaigns` (per-campaign progress with
+    the next action derived on read), and `segments`. Search is typed with `campaign_ids`,
+    `lead_status`, `engagement`, `segment_ids`, and `verification_status`; `add` accepts
+    `segments`, `subscribed`, and an imported verification verdict. `timeline` takes `cursor`.
+  - **apiKeys**: `revokeSelf`, which needs no scope so any credential can end itself.
+  - **unibox**: `folder` on list and `markSeen` (batch or whole-folder sweeps); `UniboxItem`
+    carries `snippet`, and `body_html`/`body_plain`/`body_truncated` on `get`.
+  - **misc**: `authConfig`, the public deployment capabilities including `websocket_url` and
+    `app_url` on a self-hosted instance.
+
+  Gateway:
+
+  - Added the `CAMPAIGN_IDLE`, `ACCOUNT_SYNC_STATE`, `PAGE_HIT`, and `FORM_SUBMISSION_CREATED`
+    events with typed payloads, the `FORM` and `PAGE` intents, and the engagement fields on
+    `EMAIL_OPENED`/`EMAIL_CLICKED` (`occurred_at`, `machine`, `client`, `device_type`,
+    `country_code`, `city`, `link_label`).
+  - A `phx_join` refused as `rate_limited` is no longer final: the client emits `rateLimited`
+    (now typed as `RateLimitedInfo`, with the `topic`), keeps the socket open, and re-sends the
+    join once `retry_after_ms` has elapsed. Pending rejoins are dropped on close.
+  - Added the `4005` malformed-topic rejection code.
+
+  Coverage gap closed while auditing the route table:
+
+  - **misc**: `moveFolder`, `moveTag`, and `moveCategory`. All three groups have always exposed
+    a reorder route (`PATCH /{folders|tags|categories}/:id/move`), and none of them were
+    reachable from the SDK. Each returns the whole list's new order.
+
+  Type corrections (the old fields were never on the wire):
+
+  - **`CampaignStep`** dropped `body` and `delay_days` for the fields the API actually returns:
+    `name`, `kind`, `body_plain`/`body_html`, `wait_after` (days, not minutes), `x`/`y`, the
+    `conditions` branch tree, and the typed `action` config. `updateStep` takes
+    `UpdateCampaignStepParams` instead of an untyped record.
+  - **`ImportColumnMapping`** documents the `custom` target spelling and the
+    `verification_provider` column, and `contacts.importPreview`/`importCommit` take a typed
+    `ContactImportParams` carrying `mapping` and `segment_ids`.
+  - **`PaginationMeta.total`** is optional. Several list endpoints (the unibox, audit logs,
+    campaign logs, webhook deliveries, suppressions) send `{next_cursor, has_more}` with no
+    `total` key at all, so typing it as always present meant a `null` check silently passed on
+    `undefined`. Branch on `has_more`.
+
+  Catalog updates:
+
+  - **webhooks**: added `form.submitted` to `WEBHOOK_EVENTS`.
+  - **errors**: `WarmblyAPIError.code` is typed as `ErrorCode`, an open union of the documented
+    stable codes (`list_bounce_risk`, `leads_undeliverable`, `mailbox_allowance_reached`,
+    `storage_limit_reached`, and the rest).
+
+  Release plumbing:
+
+  - The `VERSION` constant the User-Agent is built from had drifted: 0.2.0 shipped announcing
+    itself as `warmbly-js/0.1.0`, because `changeset version` bumps package.json and knows
+    nothing about that file. `pnpm version-packages` now rewrites it, and `version.test.ts`
+    fails the build if the two ever disagree.
+
 ## 0.2.0
 
 ### Minor Changes
