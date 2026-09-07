@@ -113,11 +113,19 @@ jobs:
 
       # Push the bump before publishing: a failed publish is re-runnable, but a
       # published version with no matching commit is not.
-      - name: Commit and push the version bump
-        if: ${{ !inputs.dry_run && !inputs.already_versioned }}
+      # Needed by the commit below AND by `changeset publish`, which tags the release with
+      # `git tag -m`. An annotated tag needs a committer, so without this the tag fails and
+      # the push that follows reports "Everything up-to-date" having sent nothing. That is
+      # what happened to v0.3.0, when this config still lived inside the skipped commit step.
+      - name: Configure git identity
+        if: ${{ !inputs.dry_run }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Commit and push the version bump
+        if: ${{ !inputs.dry_run && !inputs.already_versioned }}
+        run: |
           git add -A
           git commit -m "chore: version packages"
           git push origin HEAD:main
@@ -134,6 +142,15 @@ jobs:
         if: ${{ !inputs.dry_run }}
         run: pnpm release
 
+      # `changeset publish` tags the release locally; this sends it. Assert the tag exists
+      # rather than trusting the push, which succeeds with "Everything up-to-date" when
+      # tagging failed earlier and there is nothing to send.
       - name: Push release tags
         if: ${{ !inputs.dry_run }}
-        run: git push --tags
+        run: |
+          version="$(jq -r .version package.json)"
+          if ! git rev-parse -q --verify "refs/tags/v${version}" >/dev/null; then
+            echo "::error::changeset publish did not create the tag v${version}."
+            exit 1
+          fi
+          git push origin "v${version}"
