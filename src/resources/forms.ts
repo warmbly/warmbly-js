@@ -53,6 +53,11 @@ export interface Form {
   category_ids?: string[];
   allowed_domains?: string[];
   captcha_enabled?: boolean;
+  /**
+   * Classify each submission through the triage service. Junk is kept but creates no
+   * contact and joins no campaign.
+   */
+  triage_enabled?: boolean;
   logo_url?: string;
   cover_url?: string;
   background_url?: string;
@@ -82,8 +87,12 @@ export interface UpdateFormParams {
   category_ids?: string[];
   allowed_domains?: string[];
   captcha_enabled?: boolean;
+  triage_enabled?: boolean;
   [key: string]: unknown;
 }
+
+/** A submission's triage verdict. Empty when the form did not triage or the call did not complete. */
+export type FormTriage = "buyer" | "vendor" | "job_seeker" | "other" | "junk" | "" | (string & {});
 
 /** One visitor submission of a hosted form. */
 export interface FormSubmission {
@@ -96,6 +105,10 @@ export interface FormSubmission {
   /** The answers, keyed by field. */
   data?: Record<string, unknown>;
   source_url?: string;
+  /** The triage verdict, when the form has triage on. */
+  triage?: FormTriage;
+  /** The triage model's own confidence in `triage`. */
+  triage_confidence?: number;
   created_at?: string;
   contact_email?: string;
   contact_name?: string;
@@ -185,6 +198,8 @@ export interface FormsConfig {
   base_url: string;
   /** Whether the deployment can put a captcha on a form. */
   captcha_available: boolean;
+  /** Whether the deployment can triage submissions. */
+  triage_available?: boolean;
   [key: string]: unknown;
 }
 

@@ -95,8 +95,10 @@ Resources hang off the client and mirror the API surface:
 | `warmbly.forms` | Hosted lead-capture forms, submissions, statistics, custom domain |
 | `warmbly.suppressions` | The workspace suppression list |
 | `warmbly.emails` | Email accounts (mailboxes), warmup, tracking domain, hold/release, sending behaviour, sending |
-| `warmbly.unibox` | Unified inbox: threads, replies, compose, drafts, labels, snoozes |
-| `warmbly.analytics` | Dashboard, deliverability, warmup, and campaign analytics |
+| `warmbly.unibox` | Unified inbox: threads, replies, compose, drafts, labels, snoozes, folder moves |
+| `warmbly.placement` | Inbox placement tests and batches, seed mailboxes, coverage |
+| `warmbly.emailImages` | Images uploaded for use in email bodies |
+| `warmbly.analytics` | Dashboard, deliverability, warmup, direct-mail, inbox-tagging, warmup placement and campaign analytics |
 | `warmbly.advisor` | Recommendations about your sending posture, and the fixes for them |
 | `warmbly.generation` | AI writing: compose, rewrite a selection, preview AI variables |
 | `warmbly.aiSkills` | Organization playbooks every AI surface follows |
@@ -140,6 +142,39 @@ await warmbly.forms.update(form.id, { status: "published", campaign_id: "camp_1"
 const { url } = await warmbly.forms.mintLink(form.id, "c_1"); // personalized link
 ```
 
+### Imports, bulk actions and placement
+
+Large contact files import in the background: create the import, analyze the columns, then
+start it. Rows that fail are downloadable as CSV. Bulk calls take either ids or a selection
+(`{ all: true, filters, exclude }`), and `contacts.add` takes a bare array of contacts.
+
+```ts
+const imp = await warmbly.contacts.createImport(file, { filename: "leads.csv" });
+const analysis = await warmbly.contacts.analyzeImport(imp.id, {
+  mapping: imp.preview?.suggested_mapping ?? [],
+  has_header: true,
+});
+await warmbly.contacts.startImport(imp.id, {
+  mapping: imp.preview?.suggested_mapping ?? [],
+  has_header: true,
+});
+const failures = await warmbly.contacts.importFailures(imp.id); // CSV text
+```
+
+Inbox placement tests send a copy of a message through seed mailboxes and report where each
+landed. Preview a batch to see the cost, then create it:
+
+```ts
+const preview = await warmbly.placement.previewBatch({ campaign_id: "camp_1" });
+const batch = await warmbly.placement.createBatch({ campaign_id: "camp_1" });
+const detail = await warmbly.placement.getBatch(batch.id);
+```
+
+Campaigns also expose `sendPlan`, per-lead `pauseLead`, `resumeLead`, `getLeadHold`,
+`getLeadCC` and `setLeadCC`, and `getPlacementMonitor`/`putPlacementMonitor`. Note that a
+binary `xlsx` contact export is not supported by the text-decoding REST client; use `csv`
+or `json`.
+
 ### Agent tools
 
 Function-calling agents that do not speak MCP get the same permission-filtered tool
@@ -159,7 +194,13 @@ token usage rather than a flat label. Drafting never sends — you decide what t
 ```ts
 // Draft a reply grounded in the thread, the contact, and your voice profile.
 const draft = await warmbly.unibox.replyDraft({ thread_id: "t_1" });
-if (draft.text) await warmbly.unibox.reply({ thread_id: "t_1", body: draft.text });
+if (draft.text) await warmbly.unibox.reply({
+    email_account_id: "mb_1",
+    to: ["jordan@acme.com"],
+    subject: "Re: Quick question",
+    thread_id: "t_1",
+    body_plain: draft.text,
+  });
 console.log(draft.credits_charged, draft.model);
 
 // Compose drafting may ask a clarifying question instead of inventing a pitch.
@@ -312,6 +353,8 @@ gw.on("AI_DRAFT_READY", (e) => console.log("draft awaiting review", e.draft_id))
 gw.on("BILLING_CREDITS_LOW", (e) => console.log("credits low", e.balance, e.threshold));
 gw.on("CAMPAIGN_IDLE", (e) => console.log("waiting for leads", e.campaign_id));
 gw.on("FORM_SUBMISSION_CREATED", (e) => console.log("form submitted", e.form_id));
+gw.on("PLACEMENT_TEST_UPDATED", (e) => console.log("placement", e.test_id, e.status));
+gw.on("CONTACT_IMPORT_PROGRESS", (e) => console.log("import", e.import_id, e.status));
 
 // Lifecycle
 gw.on("hello", (h) => console.log("connected at seq", h.seq));
@@ -323,7 +366,7 @@ await gw.connect();
 gw.close();
 ```
 
-**Intents** are event families (`EMAIL`, `CAMPAIGN`, `AUDIT`, `CUSTOM`, `AI`, `BILLING`, `FORM`, `PAGE`, and more) that narrow the stream so you only receive and pay the rate budget for what you act on. **Channels** beyond the org stream are joinable too: `gw.joinCampaign(id)`, `gw.joinAccount(id)`, `gw.joinBulk(id)`.
+**Intents** are event families (`EMAIL`, `CAMPAIGN`, `AUDIT`, `CUSTOM`, `AI`, `BILLING`, `FORM`, `PAGE`, `WARMUP`, `PLACEMENT`, `DIRECT`, `IMPORT`, and more). Intents match by substring of the event type, so `EMAIL` also receives `DIRECT_EMAIL_*` that narrow the stream so you only receive and pay the rate budget for what you act on. **Channels** beyond the org stream are joinable too: `gw.joinCampaign(id)`, `gw.joinAccount(id)`, `gw.joinBulk(id)`.
 
 Joins have their own per-minute budget. When the server refuses one as `rate_limited`, the
 client emits `rateLimited` (with the `topic` and `retry_after_ms`), keeps the socket open, and

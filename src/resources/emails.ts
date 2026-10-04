@@ -8,7 +8,36 @@ export interface EmailAccount {
   email?: string;
   provider?: "gmail" | "outlook" | "smtp_imap" | (string & {});
   status?: "active" | "inactive" | "revoked" | (string & {});
+  /**
+   * @deprecated The server has no such field. Warmup is on when {@link EmailAccount.warmup}
+   * is set and {@link EmailAccount.warmup_paused_at} is null.
+   */
   warmup_enabled?: boolean;
+  /** When warmup was enabled, or `null` when it never was. */
+  warmup?: string | null;
+  /** Set while warmup is paused; null otherwise. */
+  warmup_paused_at?: string | null;
+  /** `folder`, `inbox` or `archive`: where warmup mail is filed in the mailbox owner's client. */
+  warmup_placement?: "folder" | "inbox" | "archive" | (string & {});
+  /** The folder for `warmup_placement: "folder"`. Empty means the instance default. */
+  warmup_folder?: string;
+  /** How long warmup mail stays in the mailbox. 0 means the instance setting. */
+  warmup_retention_days?: number;
+  /** The verified provider alias this mailbox sends from. Empty means its own address. */
+  send_as_email?: string;
+  /** Who hosts the mailbox (`google_workspace`, `microsoft365`, ...); empty until known. */
+  mail_host?: string;
+  /** How the mailbox signs in: `password`, `app_password`, `oauth` or `delegated`; empty until known. */
+  auth_method?: string;
+  domain_grant_id?: string;
+  /** The inbox vendor connection a mailbox was imported from. */
+  vendor_connection_id?: string;
+  vendor?: string;
+  avatar_url?: string;
+  /** Whether hand-written unibox sends from this mailbox carry open and click tracking. Off by default. */
+  track_direct_mail?: boolean;
+  /** Whether unibox Archive, Delete and Move to inbox also move the message in the mailbox. On by default. */
+  relay_folder_moves?: boolean;
   /** The sending domain's authentication state, refreshed by a background check. */
   auth_state?: "passing" | "failing" | "unknown" | (string & {});
   /** When the domain entered `failing`; null otherwise. */
@@ -24,8 +53,41 @@ export interface EmailAccount {
 
 /** Body for {@link Emails.update}. Every field is optional; open shape. */
 export interface UpdateEmailParams {
+  /** Display name. */
+  name?: string;
+  signature_plain?: string;
+  signature_html?: string;
+  signature_sync?: boolean;
+  signature_code?: boolean;
+  /**
+   * The verified provider alias to send as. An empty string goes back to the mailbox's own
+   * address. See {@link Emails.identity} for the verified aliases.
+   */
+  send_as_email?: string;
+  /** `active`, `inactive` or `revoked`. */
+  status?: "active" | "inactive" | "revoked" | (string & {});
   /** Daily cold-campaign cap, 0..5000 (default 50). */
   campaign_limit?: number;
+  min_wait_time?: number;
+  reply_to?: string;
+  warmup_base?: number;
+  warmup_max?: number;
+  warmup_increase?: number;
+  warmup_reply_rate?: number;
+  warmup_tag?: string;
+  warmup_start_time?: string;
+  warmup_end_time?: string;
+  warmup_days?: number;
+  /** Where warmup mail is filed in the mailbox owner's client: `folder`, `inbox` or `archive`. */
+  warmup_placement?: "folder" | "inbox" | "archive";
+  /** The destination for `folder` placement. An empty string goes back to the instance default. */
+  warmup_folder?: string;
+  /** How long warmup mail stays in the mailbox. 0 goes back to the instance setting. */
+  warmup_retention_days?: number;
+  /** Turn the unibox's filing relay to the mailbox on or off. */
+  relay_folder_moves?: boolean;
+  /** Tag ids for the mailbox. */
+  tags?: string[];
   /** The mailbox's IANA zone. Send an empty string to clear it. */
   timezone?: string;
   /** SMTP/IMAP only: file a copy of each outbound message in the Sent folder (default true). */
@@ -168,6 +230,10 @@ export interface SendRotationState {
 export interface EmailSyncStatus {
   /** `null` until the worker has reported. */
   state: {
+    /** Folders the last listing could not follow because the server had more than the sync covers. */
+    folders_skipped_cap?: number;
+    /** Folders whose name the server listed more than once. */
+    folders_skipped_conflict?: number;
     backfill_status?: string;
     backfill_synced?: number;
     backfill_since?: string;
@@ -185,9 +251,62 @@ export interface EmailSyncStatus {
     backfill_messages?: number;
     daily_messages?: number;
     org_daily_messages?: number;
+    /** The folders the sync leaves alone (each also covers its subfolders). IMAP only. */
+    skip_folders?: string[];
     [key: string]: unknown;
   };
+  /** The stored skip list, surfaced where {@link Emails.updateSync} writes it. */
+  skip_folders?: string[];
+  /** What the worker last listed on the server, INBOX first. Empty for Gmail and Outlook. */
+  folders?: SyncFolder[];
   [key: string]: unknown;
+}
+
+/** One folder the sync has seen on the server. */
+export interface SyncFolder {
+  /** The name to use in `skip_folders`. */
+  name: string;
+  /** The canonical folder it files under, so special folders (which cannot be skipped) are recognisable. */
+  folder: string;
+  [key: string]: unknown;
+}
+
+/** One address the provider has verified a mailbox to send as. */
+export interface SendAsIdentity {
+  email: string;
+  name: string;
+  /** The mailbox's own address. */
+  is_primary: boolean;
+  /** The one the provider composes from by default (reported, not followed). */
+  is_default: boolean;
+  /** Sending as an unverified alias is refused by the provider, so those are offered but not selectable. */
+  verified: boolean;
+  [key: string]: unknown;
+}
+
+/** Where a stored signature came from. */
+export type SignatureSource = "manual" | "provider" | (string & {});
+
+/** A mailbox's sending identity: which addresses it may send as, which is in use, and the signature's origin. */
+export interface EmailSendIdentity {
+  /** False for Outlook and SMTP/IMAP, which answer with an empty list instead of an error. Only Gmail supports it. */
+  supported: boolean;
+  provider: string;
+  /** The address the mailbox authenticates as; what an empty `send_as_email` means. */
+  mailbox_email: string;
+  send_as_email: string;
+  identities: SendAsIdentity[];
+  /** When the aliases were last read from the provider. */
+  synced_at?: string;
+  signature_source: SignatureSource;
+  signature_imported_at?: string;
+  [key: string]: unknown;
+}
+
+/** Body for {@link Emails.refreshIdentity}. */
+export interface RefreshIdentityParams {
+  /** Also import the provider's signature, overwriting the stored one. Off by default. */
+  import_signature?: boolean;
 }
 
 /**
@@ -379,6 +498,57 @@ export class Emails extends APIResource {
    */
   sync(id: string, opts?: RequestOptions): Promise<EmailSyncStatus> {
     return this.http.get<EmailSyncStatus>(this.path("emails", id, "sync"), opts);
+  }
+
+  /**
+   * Replaces the folders the mailbox's sync leaves alone (IMAP only; each folder also
+   * covers its subfolders). The list is the desired state, so a retry converges and no
+   * `Idempotency-Key` is needed. Returns the stored list. Needs `WRITE_EMAILS`.
+   * @example
+   * const { skip_folders } = await warmbly.emails.updateSync("mb_1", ["Junk", "Archive/2019"]);
+   */
+  updateSync(id: string, skipFolders: string[]): Promise<{ skip_folders: string[] }> {
+    return this.http.put<{ skip_folders: string[] }>(this.path("emails", id, "sync"), {
+      body: { skip_folders: skipFolders },
+    });
+  }
+
+  /**
+   * Reports which addresses the mailbox may send as, which one it uses, and where its
+   * signature came from. Reads stored state only: the provider is not called. Only Gmail
+   * supports it; other providers answer with `supported: false`. Needs `READ_EMAILS`.
+   * @example
+   * const { identities, send_as_email } = await warmbly.emails.identity("mb_1");
+   */
+  identity(id: string, opts?: RequestOptions): Promise<EmailSendIdentity> {
+    return this.http.get<EmailSendIdentity>(this.path("emails", id, "identity"), opts);
+  }
+
+  /**
+   * Re-reads the mailbox's send-as addresses from the provider and stores them, optionally
+   * importing the provider's signature too. Repeating it converges on the same state, so no
+   * `Idempotency-Key` is needed. Needs `WRITE_EMAILS`.
+   * @example
+   * const identity = await warmbly.emails.refreshIdentity("mb_1", { import_signature: true });
+   */
+  refreshIdentity(id: string, params?: RefreshIdentityParams): Promise<EmailSendIdentity> {
+    return this.http.post<EmailSendIdentity>(this.path("emails", id, "identity", "refresh"), {
+      body: params,
+    });
+  }
+
+  /**
+   * Switches open and click tracking on or off for the mailbox's hand-written unibox sends.
+   * Off by default and set per mailbox, because a pixel belongs in a cold sequence more
+   * comfortably than in a one-to-one reply. Needs `WRITE_EMAILS`.
+   * @example
+   * const { track_direct_mail } = await warmbly.emails.setDirectTracking("mb_1", true);
+   */
+  setDirectTracking(id: string, enabled: boolean): Promise<{ track_direct_mail: boolean }> {
+    return this.http.patch<{ track_direct_mail: boolean }>(
+      this.path("emails", id, "direct-tracking"),
+      { body: { enabled } },
+    );
   }
 
   /**

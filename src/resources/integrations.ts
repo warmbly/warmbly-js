@@ -6,12 +6,70 @@ export interface IntegrationCatalogEntry {
   [key: string]: unknown;
 }
 
-/** A configured integration connection. */
+/** A configured integration connection. Secrets are never serialized. */
 export interface IntegrationConnection {
   id: string;
+  organization_id?: string;
   provider?: string;
+  label?: string;
   status?: string;
+  auth_method?: string;
+  display_fields?: unknown;
+  /** The non-secret onboarding snapshot. The outbound `signing_secret` is always removed. */
+  config_capabilities?: Record<string, unknown>;
+  /** `push`, `pull` or `both`. */
+  sync_direction?: string;
+  external_account_id?: string;
+  external_account_name?: string;
+  granted_scopes?: string[];
+  token_expires_at?: string;
+  health?: string;
+  health_detail?: string | null;
+  health_checked_at?: string | null;
+  last_synced_at?: string | null;
+  last_error?: string | null;
+  last_error_at?: string | null;
   created_at?: string;
+  updated_at?: string;
+  /**
+   * Calendly and Cal.com connections only: the URL to paste into the provider. Returned
+   * on create, and again by {@link Integrations.rotateInboundUrl} as its own field.
+   */
+  inbound_webhook_url?: string;
+  [key: string]: unknown;
+}
+
+/** Body for {@link Integrations.pushConnection}: contacts to upsert into the connected CRM. */
+export interface PushContactsParams {
+  /** Contact ids (the original field). */
+  contact_ids?: string[];
+  /** The selection form: explicit ids. Equivalent to `contact_ids`. */
+  contacts?: string[];
+  /** Switches to `filters`, the "select all matching" form. */
+  all?: boolean;
+  /** The same body `contacts.search` takes. */
+  filters?: Record<string, unknown>;
+  /** Ids dropped from the resolved set. Ignored unless `all` is true. */
+  exclude?: string[];
+  [key: string]: unknown;
+}
+
+/** The result of {@link Integrations.pushConnection}. */
+export interface PushContactsResult {
+  provider: string;
+  pushed: number;
+  failed: number;
+  results: Array<Record<string, unknown>>;
+  [key: string]: unknown;
+}
+
+/** The outbound signing secret of an automation connection. */
+export interface WebhookSecret {
+  signing_secret: string;
+  /** `X-Warmbly-Signature`. */
+  signature_header: string;
+  /** A description of the signature scheme. */
+  scheme: string;
   [key: string]: unknown;
 }
 
@@ -29,7 +87,9 @@ export interface IntegrationConnectionDetail extends IntegrationConnection {
 
 /**
  * Manage third-party integrations: catalog, connections, events, field mappings, runs,
- * webhook secret, test/push, and bookings. Reachable as `warmbly.integrations`.
+ * webhook secret, inbound signing key, test/push, and bookings. Reachable as
+ * `warmbly.integrations`. Reads need the `INTEGRATIONS` scope (or the matching dashboard
+ * permissions); writes need `INTEGRATIONS`.
  *
  * @example
  * const catalog = await warmbly.integrations.catalog();
@@ -193,36 +253,75 @@ export class Integrations extends APIResource {
   }
 
   /**
-   * Reveals a connection's webhook secret.
+   * Reveals an automation connection's outbound webhook signing secret (created on first
+   * call). Needs `INTEGRATIONS`.
    * @example
-   * const secret = await warmbly.integrations.getWebhookSecret("conn_1");
+   * const { signing_secret, signature_header } = await warmbly.integrations.getWebhookSecret("conn_1");
    */
-  getWebhookSecret(id: string, opts?: RequestOptions): Promise<Record<string, unknown>> {
-    return this.http.get<Record<string, unknown>>(
+  getWebhookSecret(id: string, opts?: RequestOptions): Promise<WebhookSecret> {
+    return this.http.get<WebhookSecret>(
       this.path("integrations", "connections", id, "webhook-secret"),
       opts,
     );
   }
 
   /**
-   * Runs a connection test.
+   * Sets the key a Calendly or Cal.com connection's inbound deliveries must be signed with,
+   * on top of the secret in the inbound URL. An empty string removes the key and goes back
+   * to the URL secret alone. The key must be 8 to 512 characters; any other provider is a
+   * 400. Setting the same key again lands on the same state, so retries are safe. Returns
+   * the updated connection. Needs `INTEGRATIONS`.
    * @example
-   * const result = await warmbly.integrations.testConnection("conn_1");
+   * const conn = await warmbly.integrations.setSigningKey("conn_1", "whsec_...");
    */
-  testConnection(id: string, params?: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return this.http.post<Record<string, unknown>>(
-      this.path("integrations", "connections", id, "test"),
-      { body: params },
+  setSigningKey(id: string, signingKey: string): Promise<IntegrationConnection> {
+    return this.http
+      .put<{ connection: IntegrationConnection }>(
+        this.path("integrations", "connections", id, "signing-key"),
+        { body: { signing_key: signingKey } },
+      )
+      .then((r) => r.connection);
+  }
+
+  /**
+   * Mints a new inbound URL for a Calendly or Cal.com connection. The previous URL stops
+   * working immediately, so update the provider's webhook before relying on it. Any other
+   * provider is a 400. Needs `INTEGRATIONS`.
+   * @example
+   * const { inbound_webhook_url } = await warmbly.integrations.rotateInboundUrl("conn_1");
+   */
+  rotateInboundUrl(id: string, opts?: RequestOptions): Promise<{ inbound_webhook_url: string }> {
+    return this.http.post<{ inbound_webhook_url: string }>(
+      this.path("integrations", "connections", id, "rotate-inbound-url"),
+      opts,
     );
   }
 
   /**
-   * Pushes data through a connection.
+   * Fires a synthetic event through the connection's notify and webhook automations so you
+   * can confirm the Zap, scenario or channel is wired. Returns how many deliveries were
+   * sent. The platform ignores any request body. Needs `INTEGRATIONS`.
    * @example
-   * await warmbly.integrations.pushConnection("conn_1", { contact_ids: ["c_1"] });
+   * const { sent } = await warmbly.integrations.testConnection("conn_1");
    */
-  pushConnection(id: string, params?: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return this.http.post<Record<string, unknown>>(
+  testConnection(id: string, params?: Record<string, unknown>): Promise<{ sent: number }> {
+    return this.http.post<{ sent: number }>(this.path("integrations", "connections", id, "test"), {
+      body: params,
+    });
+  }
+
+  /**
+   * Upserts contacts into the connected CRM, synchronously. Pass `contact_ids`, or the
+   * selection form (`contacts`, or `all` plus `filters` and `exclude`). Capped at 500
+   * contacts per push (`too_many_contacts`). A 409 means the connection must be
+   * reconnected first. Needs `INTEGRATIONS`.
+   * @example
+   * const { pushed, failed } = await warmbly.integrations.pushConnection("conn_1", {
+   *   contact_ids: ["c_1"],
+   * });
+   */
+  pushConnection(id: string, params: PushContactsParams): Promise<PushContactsResult> {
+    return this.http.post<PushContactsResult>(
       this.path("integrations", "connections", id, "push"),
       { body: params },
     );

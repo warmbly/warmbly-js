@@ -53,6 +53,15 @@ if (!mailbox) {
   const sync = await warmbly.emails.sync(mailbox.id);
   console.log("backfill", sync.state?.backfill_status ?? "not reported", "throttled until", sync.state?.throttled_until ?? "never");
 
-  // 7. SMTP/IMAP mailboxes can opt out of filing a copy in Sent.
+  // 7. Which addresses may this mailbox send as? (Gmail only; others answer supported: false.)
+  const identity = await warmbly.emails.identity(mailbox.id);
+  console.log(
+    "send-as",
+    identity.supported ? identity.identities.map((i) => i.email) : "not supported",
+  );
+  // Open and click tracking on hand-written unibox sends is off by default; opt in per mailbox.
+  await warmbly.emails.setDirectTracking(mailbox.id, false);
+
+  // 8. SMTP/IMAP mailboxes can opt out of filing a copy in Sent.
   await warmbly.emails.update(mailbox.id, { save_to_sent: false, timezone: "America/Denver" });
 }

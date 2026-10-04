@@ -324,3 +324,120 @@ describe("Emails: allowance, tracking domain, hold/release, sync, auth check, be
     });
   });
 });
+
+describe("Emails: identity, direct tracking, sync folders", () => {
+  const identity = {
+    supported: true,
+    provider: "gmail",
+    mailbox_email: "sam@warmbly.com",
+    send_as_email: "hello@warmbly.com",
+    identities: [
+      {
+        email: "sam@warmbly.com",
+        name: "Sam",
+        is_primary: true,
+        is_default: true,
+        verified: true,
+      },
+      {
+        email: "hello@warmbly.com",
+        name: "Warmbly",
+        is_primary: false,
+        is_default: false,
+        verified: false,
+      },
+    ],
+    synced_at: "2026-10-04T09:00:00Z",
+    signature_source: "provider",
+    signature_imported_at: "2026-10-04T09:00:00Z",
+  };
+
+  it("identity GETs /emails/:id/identity and decodes the aliases", async () => {
+    const { http, fetchMock } = clientWith(identity);
+    const out = await new Emails(http).identity("mb1");
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("GET");
+    expect(url).toMatch(/\/emails\/mb1\/identity$/);
+    expect(out.identities[1]?.verified).toBe(false);
+    expect(out.signature_source).toBe("provider");
+  });
+
+  it("identity decodes an unsupported provider with an empty list", async () => {
+    const { http } = clientWith({
+      supported: false,
+      provider: "smtp_imap",
+      mailbox_email: "sam@warmbly.com",
+      send_as_email: "",
+      identities: [],
+      signature_source: "manual",
+    });
+    const out = await new Emails(http).identity("mb1");
+    expect(out.supported).toBe(false);
+    expect(out.synced_at).toBeUndefined();
+  });
+
+  it("refreshIdentity POSTs import_signature", async () => {
+    const { http, fetchMock } = clientWith(identity);
+    await new Emails(http).refreshIdentity("mb1", { import_signature: true });
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("POST");
+    expect(url).toMatch(/\/emails\/mb1\/identity\/refresh$/);
+    expect(JSON.parse(String(init.body))).toEqual({ import_signature: true });
+  });
+
+  it("refreshIdentity sends no body for the plain address refresh", async () => {
+    const { http, fetchMock } = clientWith(identity);
+    await new Emails(http).refreshIdentity("mb1");
+    expect(lastCall(fetchMock).init.body).toBeUndefined();
+  });
+
+  it("setDirectTracking PATCHes enabled and returns the stored flag", async () => {
+    const { http, fetchMock } = clientWith({ track_direct_mail: true });
+    const out = await new Emails(http).setDirectTracking("mb1", true);
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("PATCH");
+    expect(url).toMatch(/\/emails\/mb1\/direct-tracking$/);
+    expect(JSON.parse(String(init.body))).toEqual({ enabled: true });
+    expect(out.track_direct_mail).toBe(true);
+  });
+
+  it("updateSync PUTs the whole skip list and returns the stored one", async () => {
+    const { http, fetchMock } = clientWith({ skip_folders: ["Junk"] });
+    const out = await new Emails(http).updateSync("mb1", ["Junk"]);
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("PUT");
+    expect(url).toMatch(/\/emails\/mb1\/sync$/);
+    expect(JSON.parse(String(init.body))).toEqual({ skip_folders: ["Junk"] });
+    expect(out.skip_folders).toEqual(["Junk"]);
+  });
+
+  it("sync decodes the skip list and seen folders", async () => {
+    const { http } = clientWith({
+      state: { backfill_status: "running", folders_skipped_cap: 2 },
+      policy: { backfill_days: 90, skip_folders: ["Junk"] },
+      skip_folders: ["Junk"],
+      folders: [
+        { name: "INBOX", folder: "inbox" },
+        { name: "Junk", folder: "spam" },
+      ],
+    });
+    const out = await new Emails(http).sync("mb1");
+    expect(out.skip_folders).toEqual(["Junk"]);
+    expect(out.folders?.[1]?.folder).toBe("spam");
+    expect(out.state?.folders_skipped_cap).toBe(2);
+  });
+
+  it("update sends the new warmup placement and alias fields", async () => {
+    const { http, fetchMock } = clientWith({ id: "mb1", warmup_placement: "archive" });
+    await new Emails(http).update("mb1", {
+      warmup_placement: "archive",
+      send_as_email: "",
+      relay_folder_moves: false,
+    });
+    expect(JSON.parse(String(lastCall(fetchMock).init.body))).toEqual({
+      warmup_placement: "archive",
+      send_as_email: "",
+      relay_folder_moves: false,
+    });
+  });
+});

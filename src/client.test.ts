@@ -17,6 +17,7 @@ import {
   Campaigns,
   Contacts,
   Crm,
+  EmailImages,
   Emails,
   Forms,
   Generation,
@@ -24,6 +25,7 @@ import {
   LeadSync,
   Meetings,
   Misc,
+  Placement,
   Segments,
   Suppressions,
   Templates,
@@ -165,10 +167,12 @@ describe("Warmbly construction", () => {
     expect(warmbly.emails).toBeInstanceOf(Emails);
     expect(warmbly.unibox).toBeInstanceOf(Unibox);
     expect(warmbly.analytics).toBeInstanceOf(Analytics);
+    expect(warmbly.placement).toBeInstanceOf(Placement);
     expect(warmbly.advisor).toBeInstanceOf(Advisor);
     expect(warmbly.generation).toBeInstanceOf(Generation);
     expect(warmbly.aiSkills).toBeInstanceOf(AISkills);
     expect(warmbly.templates).toBeInstanceOf(Templates);
+    expect(warmbly.emailImages).toBeInstanceOf(EmailImages);
     expect(warmbly.crm).toBeInstanceOf(Crm);
     expect(warmbly.meetings).toBeInstanceOf(Meetings);
     expect(warmbly.integrations).toBeInstanceOf(Integrations);

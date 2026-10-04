@@ -15,12 +15,12 @@ console.log(
   templates.map((t) => t.name),
 );
 
-// Create a new template. Subject and body may contain {{variables}} that get
-// filled in at render time.
+// Create a new template. Subject and bodies may contain {{.Variable}} placeholders that
+// get filled in at render time.
 const template = await warmbly.templates.create({
   name: "Intro outreach",
-  subject: "Quick question, {{first_name}}",
-  body: "Hi {{first_name}} at {{company}}, are you the right person to talk to?",
+  subject: "Quick question, {{.FirstName}}",
+  body_plain: "Hi {{.FirstName}} at {{.Company}}, are you the right person to talk to?",
 });
 console.log("created", template.id);
 
@@ -30,7 +30,7 @@ console.log("fetched subject", fetched.subject);
 
 // Update the subject line.
 const updated = await warmbly.templates.update(template.id, {
-  subject: "A quick idea for {{company}}",
+  subject: "A quick idea for {{.Company}}",
 });
 console.log("updated subject", updated.subject);
 
@@ -41,11 +41,11 @@ const copy = await warmbly.templates.duplicate(template.id, {
 console.log("duplicated into", copy.id);
 
 // Render the template with a sample contact's field values. The variables map
-// is substituted into the subject and body.
+// is substituted into the subject and both bodies.
 const rendered = await warmbly.templates.render(template.id, {
   variables: {
-    first_name: "Sam",
-    company: "Warmbly",
+    FirstName: "Sam",
+    Company: "Warmbly",
   },
 });
 console.log("rendered", rendered);
@@ -54,12 +54,21 @@ console.log("rendered", rendered);
 // takes raw content rather than a template id.
 const score = await warmbly.templates.score({
   subject: updated.subject,
-  body: fetched.body,
+  body_plain: fetched.body_plain,
 });
-console.log("score", score);
+console.log("score", score.score, score.issues.map((i) => i.message));
+
+// For located findings and rewrites, run the AI spam analysis. It charges AI credits.
+const analysis = await warmbly.templates.analyze({
+  subject: updated.subject,
+  body_plain: fetched.body_plain,
+});
+for (const finding of analysis.findings) {
+  console.log(finding.severity, finding.text, "->", finding.suggestion);
+}
 
 // Reorder how templates appear in the UI by passing the desired id order.
 const reordered = await warmbly.templates.reorder({
-  order: [copy.id, template.id],
+  ids: [copy.id, template.id],
 });
-console.log("reordered", reordered);
+console.log("reordered", reordered.map((t) => t.id));

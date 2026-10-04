@@ -19,9 +19,9 @@ export const GatewayIntents = {
   AUDIT: "AUDIT",
   /** Campaign lifecycle events (`CAMPAIGN_*`). */
   CAMPAIGN: "CAMPAIGN",
-  /** Email/message events (`EMAIL_*`). */
+  /** Email/message events (`EMAIL_*`, which also matches `DIRECT_EMAIL_*`). */
   EMAIL: "EMAIL",
-  /** Contact events (`CONTACT_*`, `CONTACTS_RELOAD`). */
+  /** Contact events (`CONTACT_*`, including `CONTACT_IMPORT_PROGRESS`, and `CONTACTS_RELOAD`). */
   CONTACT: "CONTACT",
   /** Hosted form events (`FORM_SUBMISSION_CREATED`). */
   FORM: "FORM",
@@ -43,6 +43,14 @@ export const GatewayIntents = {
   AI: "AI",
   /** AI contact-research progress (`AI_RESEARCH_PROGRESS`). */
   RESEARCH: "RESEARCH",
+  /** Warmup events (`WARMUP_PLACEMENT`). */
+  WARMUP: "WARMUP",
+  /** Inbox placement test events (`PLACEMENT_TEST_UPDATED`, also matches `WARMUP_PLACEMENT`). */
+  PLACEMENT: "PLACEMENT",
+  /** Hand-written mail tracking events (`DIRECT_EMAIL_OPENED`, `DIRECT_EMAIL_CLICKED`). */
+  DIRECT: "DIRECT",
+  /** Import progress events (`MAILBOX_IMPORT_PROGRESS`, `CONTACT_IMPORT_PROGRESS`). */
+  IMPORT: "IMPORT",
   /** Billing and AI-credit events (`BILLING_CREDITS_LOW`, `BILLING_CREDITS_CHANGED`). */
   BILLING: "BILLING",
 } as const;

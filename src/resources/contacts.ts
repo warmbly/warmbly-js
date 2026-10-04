@@ -1,7 +1,9 @@
 import { Page } from "../core/pagination";
 import type { ListResponse, RequestOptions } from "../core/types";
 import { APIResource } from "./base";
-import type { ImportColumnMapping } from "./lead-sync";
+import type { CampaignLeadCC, CampaignLeadHold } from "./campaigns";
+import type { Deal } from "./crm";
+import type { ImportColumnMapping, ImportDedupStrategy } from "./lead-sync";
 
 /** An address verification verdict in Warmbly's vocabulary. */
 export type VerificationStatus = "valid" | "risky" | "invalid" | "unknown";
@@ -38,6 +40,13 @@ export interface Contact {
   verification_checked_at?: string | null;
   /** 0..100, scored from the check plus what real mail to the address showed. */
   verification_confidence?: number;
+  /** Set while a member-requested re-check waits to run; the verdict stands until it lands. */
+  verification_requested_at?: string | null;
+  /** Who hosts the contact's inbox, read from the domain's MX; empty until the sweep has run. */
+  mail_host?: string;
+  /** The family of `mail_host` used for ESP matching: `gmail`, `outlook`, `other`, or empty. */
+  esp_provider?: "gmail" | "outlook" | "other" | "" | (string & {});
+  esp_resolved_at?: string | null;
   /** First-touch attribution, fixed at creation. */
   source?: ContactSource;
   source_detail?: string;
@@ -187,12 +196,26 @@ export interface ResearchParams {
   [key: string]: unknown;
 }
 
-/** Body for {@link Contacts.researchBatch}: up to 500 contact ids, drained in the background. */
+/**
+ * Body for {@link Contacts.researchBatch}: contact ids (`contact_ids`, or the selection's
+ * `contacts`), or `all` plus `filters` and `exclude` for a select-all. Drained in the
+ * background.
+ */
 export interface BatchResearchParams extends ResearchParams {
-  contact_ids: string[];
+  /** The original field name for an explicit id list. */
+  contact_ids?: string[];
+  /** The selection form: explicit ids. */
+  contacts?: string[];
+  /** Switches the selection to `filters`. */
+  all?: boolean;
+  filters?: ContactSearchFilters;
+  exclude?: string[];
 }
 
-/** A contact's derived status inside one campaign. */
+/**
+ * A contact's derived status inside one campaign. `paused` is a lead whose flow is held
+ * (an out-of-office auto-reply, or a member pausing it) and resumes where it stopped.
+ */
 export type LeadStatus =
   | "pending"
   | "active"
@@ -201,7 +224,8 @@ export type LeadStatus =
   | "bounced"
   | "failed"
   | "undeliverable"
-  | "unsubscribed";
+  | "unsubscribed"
+  | "paused";
 
 /** An engagement filter inside one campaign. `opened` means a human open. */
 export type LeadEngagement =
@@ -213,26 +237,99 @@ export type LeadEngagement =
   | "not_replied"
   | "bounced";
 
-/** Query/body for searching contacts. */
-export interface ContactSearchParams {
-  cursor?: string;
-  limit?: number;
+/** A filter on one custom field. */
+export interface ContactCustomFieldFilter {
+  name: string;
+  value: string;
+  type: "equal" | "starts_with" | "ends_with" | "contains" | (string & {});
+}
+
+/**
+ * Filters for searching contacts, shared by {@link Contacts.search}, the `filters` of a
+ * bulk selection, and an export. `limit`, `cursor` and `category` are the exception: the
+ * platform reads them from the query string, and {@link Contacts.search} sends them there.
+ */
+export interface ContactSearchFilters {
+  /** Text search across the core fields. */
   query?: string;
-  /** Scope to campaigns. `lead_status` and `engagement` need exactly one entry. */
+  custom_field_filters?: ContactCustomFieldFilter[];
+  /** Scope to campaigns; the contact must be in all of them. `lead_status` and `engagement` need exactly one entry. */
   campaign_ids?: string[];
   /** Filter to one derived lead status inside the one campaign in `campaign_ids`. */
   lead_status?: LeadStatus;
   /** Filter by engagement inside the one campaign in `campaign_ids`. */
   engagement?: LeadEngagement;
+  /** The contact must carry every listed category. */
+  category_ids?: string[];
   /** The contact must be a member of every listed segment. */
   segment_ids?: string[];
+  min_campaigns?: number;
+  max_campaigns?: number;
+  subscribed?: boolean;
   verification_status?: VerificationStatus;
+  /** Contacts whose inbox host is any of these. An empty string matches "not detected yet". */
+  mail_hosts?: string[];
+  created_after?: string;
+  created_before?: string;
+  updated_after?: string;
+  updated_before?: string;
+  /** A column name (`created_at`, `first_name`, `company`, ...) or `custom:<key>` for a custom field. */
+  sort_by?: string;
+  /** Ascending when true; the default is descending. */
+  reverse?: boolean;
   [key: string]: unknown;
+}
+
+/** Params for searching contacts: the {@link ContactSearchFilters} plus paging. */
+export interface ContactSearchParams extends ContactSearchFilters {
+  /** The `pagination.next_cursor` of the previous page. Sent as a query parameter. */
+  cursor?: string;
+  /** Page size. Sent as a query parameter. */
+  limit?: number;
+  /** Restrict to one category. Sent as a query parameter. */
+  category?: string;
+}
+
+/**
+ * The contacts a bulk action applies to: an explicit id list, or every contact a search
+ * matches (`all` plus `filters`) minus the ids in `exclude`. A selection naming both
+ * prefers the filter. Up to 10,000 ids per request, and up to 250,000 contacts for a
+ * select-all.
+ */
+export interface ContactSelection {
+  /** Explicit contact ids. */
+  contacts?: string[];
+  /** Switches the selection from `contacts` to `filters`. */
+  all?: boolean;
+  /** The same body {@link Contacts.search} takes. */
+  filters?: ContactSearchFilters;
+  /** Ids dropped from the resolved set. Ignored unless `all` is true. */
+  exclude?: string[];
+  [key: string]: unknown;
+}
+
+/** One custom-field edit in a bulk update. */
+export interface BulkEditContactsField {
+  type: "ADD" | "EDIT" | "DELETE" | "RENAME";
+  key: string;
+  value?: string;
+}
+
+/** Body for {@link Contacts.bulkUpdate}: a selection plus the edits to apply to it. */
+export interface BulkUpdateContactsParams extends ContactSelection {
+  add_campaigns?: string[];
+  remove_campaigns?: string[];
+  add_categories?: string[];
+  remove_categories?: string[];
+  /** Custom-field edits. `type` is `ADD`, `EDIT`, `DELETE` or `RENAME`; `RENAME` writes the new key in `value`. */
+  fields?: BulkEditContactsField[];
+  /** Subscribe or unsubscribe every contact in the selection. */
+  subscribe?: boolean;
 }
 
 /** Who checks this workspace's addresses and the contacts by verdict. */
 export interface ContactVerificationOverview {
-  provider: "builtin" | "millionverifier" | (string & {});
+  provider: "builtin" | "millionverifier" | "cleanmylist" | (string & {});
   connection_id?: string;
   /** The connected service's remaining balance. */
   credits?: number;
@@ -251,15 +348,15 @@ export interface ContactVerificationOverview {
   [key: string]: unknown;
 }
 
-/** Body for {@link Contacts.requestVerification}. At least one contact must be selected. */
-export interface ContactVerificationParams {
+/**
+ * Body for {@link Contacts.requestVerification}. At least one contact must be selected,
+ * by id list, by `all` plus `filters`, or by `campaign_id`.
+ */
+export interface ContactVerificationParams extends ContactSelection {
   /** `verify` queues a re-check; the other two record a manual verdict. */
   action: "verify" | "mark_deliverable" | "mark_undeliverable";
-  /** Contact ids, up to the bulk maximum per request. */
-  contacts?: string[];
   /** Instead of, or as well as, `contacts`: every lead of this campaign that verification refused. */
   campaign_id?: string;
-  [key: string]: unknown;
 }
 
 /** The result of {@link Contacts.requestVerification}. */
@@ -268,6 +365,11 @@ export interface ContactVerificationResult {
   action: string;
   /** True when a re-check was queued rather than a verdict recorded. */
   queued?: boolean;
+  /** Who runs a queued check: `builtin` or the connected provider. */
+  verifier?: string;
+  verifier_label?: string;
+  /** Why a connected provider cannot be used right now, in which case the built-in check runs. */
+  verifier_error?: string;
   [key: string]: unknown;
 }
 
@@ -295,6 +397,14 @@ export interface ContactCampaignState {
   campaign_name?: string;
   campaign_status?: string;
   lead_status?: LeadStatus | (string & {});
+  /** The mailbox this lead's whole sequence sends from, fixed when its first email went out. */
+  sender_id?: string;
+  sender_email?: string;
+  failure_reason?: string;
+  /** The per-lead pause, present only while it is live. */
+  hold?: CampaignLeadHold;
+  /** Contacts copied on every email to this lead in this campaign. */
+  cc?: CampaignLeadCC[];
   steps?: ContactCampaignStep[];
   completed_steps?: number;
   total_steps?: number;
@@ -318,19 +428,222 @@ export interface ContactCampaignState {
   [key: string]: unknown;
 }
 
+/** What happens when an imported row's email matches an existing contact. */
+export type ContactImportDedup = ImportDedupStrategy;
+
 /**
- * Body for {@link Contacts.importPreview} and {@link Contacts.importCommit}. The
- * mapping shape is shared with lead sync.
+ * The options of an import: how to map columns, how to treat collisions, and where the
+ * contacts go. The mapping shape is shared with lead sync.
  */
-export interface ContactImportParams {
-  /** The uploaded file to read. */
-  upload_id?: string;
+export interface ContactImportOptions {
   /** Column mappings. Exactly one column must map to `email`. */
-  mapping?: ImportColumnMapping[];
+  mapping: ImportColumnMapping[];
+  /** `skip` (the conservative default), `update`, or `create_duplicate`. */
+  dedup?: ContactImportDedup;
+  /** Whether the first row is a header. */
+  has_header: boolean;
+  category_ids?: string[];
+  campaign_ids?: string[];
   /** Segments to pin imported contacts into, as a manual include override. */
   segment_ids?: string[];
+  /** What new contacts inherit when no `subscribed` column is mapped. Defaults to true. */
+  subscribed_default?: boolean;
   [key: string]: unknown;
 }
+
+/** Statistics for one column over the whole file. */
+export interface ContactImportColumnStats {
+  filled: number;
+  /** Distinct non-empty values, capped at 1000. */
+  distinct: number;
+  samples: string[];
+  [key: string]: unknown;
+}
+
+/** What the column mapper shows: the detected columns, a sample, and a suggested mapping. */
+export interface ContactImportPreview {
+  filename: string;
+  format: string;
+  total_rows: number;
+  columns: string[];
+  has_header: boolean;
+  /** Up to 20 rows, verbatim. */
+  sample_rows: string[][];
+  /** A default the user can override, not a binding decision. */
+  suggested_mapping: ImportColumnMapping[];
+  /** Indexes whose suggestion came from inference rather than the header or values. */
+  inferred_columns?: number[];
+  /** Fill statistics for every column over the whole file. Set by background imports. */
+  column_stats?: ContactImportColumnStats[];
+  /** `saved` when the workspace confirmed a mapping for these exact headers before, else `suggested`. */
+  mapping_source?: "suggested" | "saved" | (string & {});
+  [key: string]: unknown;
+}
+
+/** An import's address-level assessment. Advisory: it is reported, never refused. */
+export interface ContactImportQuality {
+  malformed: number;
+  disposable: number;
+  /** Shared inboxes such as info@. Reported, not counted as bad. */
+  role: number;
+  bad_share_pct: number;
+  flagged: boolean;
+  summary?: string;
+  [key: string]: unknown;
+}
+
+/** A row that could not be imported. */
+export interface ContactImportRowError {
+  /** The 1-based line in the source file. */
+  line: number;
+  email?: string;
+  values?: string[];
+  reason: string;
+  [key: string]: unknown;
+}
+
+/** The result of the synchronous {@link Contacts.importCommit}. */
+export interface ContactImportResult {
+  total: number;
+  imported: number;
+  updated: number;
+  skipped: number;
+  failed: number;
+  started_at: string;
+  ended_at: string;
+  /** Per-row failures and notes, capped at 1000. */
+  errors?: ContactImportRowError[];
+  /** True when the 1000-entry cap was reached. */
+  errors_truncated?: boolean;
+  /** Absent when the import had no segment targets; false when a membership write failed. */
+  segments_pinned?: boolean;
+  quality?: ContactImportQuality;
+  [key: string]: unknown;
+}
+
+/** Where a background import is in its life. */
+export type ContactImportStatus =
+  | "draft"
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | (string & {});
+
+/** One background import of a contact file. */
+export interface ContactImport {
+  id: string;
+  organization_id: string;
+  created_by?: string;
+  filename: string;
+  format: string;
+  status: ContactImportStatus;
+  has_header: boolean;
+  columns: string[];
+  /** The number of data rows. */
+  total: number;
+  /** How many rows have settled. */
+  processed: number;
+  imported: number;
+  updated: number;
+  skipped: number;
+  failed: number;
+  /** The saved options, once a draft has been autosaved or the import started. */
+  options?: ContactImportOptions;
+  quality?: ContactImportQuality;
+  segments_pinned?: boolean;
+  notes: string[];
+  error?: string;
+  created_at: string;
+  updated_at: string;
+  started_at?: string;
+  finished_at?: string;
+  /** What the mapper shows. Carried by a draft only, so a reload resumes it. */
+  preview?: ContactImportPreview;
+  /** The first 200 failed rows once the import has finished; the failed.csv holds every one. */
+  failures?: ContactImportRowError[];
+  [key: string]: unknown;
+}
+
+/** Query params for listing background imports. */
+export interface ListContactImportsParams {
+  cursor?: string;
+  /** Page size (1..100, default 50). */
+  limit?: number;
+  [key: string]: unknown;
+}
+
+/** Body for {@link Contacts.analyzeImport}: what a draft would do under a mapping. */
+export interface AnalyzeContactImportParams {
+  mapping: ImportColumnMapping[];
+  has_header: boolean;
+}
+
+/** What an import would do, read over the whole file before anything is written. */
+export interface ContactImportAnalysis {
+  /** Every data row; each lands in exactly one of the buckets below. */
+  rows: number;
+  /** Addresses the workspace does not have yet. */
+  new: number;
+  /** Addresses the workspace already has a contact for. */
+  existing: number;
+  duplicates_in_file: number;
+  /** Rows with no usable address or an unreadable value. */
+  invalid: number;
+  /** Addresses the importing member already holds as a contact in another workspace. */
+  conflicts: number;
+  /** The first 25 invalid or conflicting rows, with reasons. */
+  invalid_samples: ContactImportRowError[];
+  quality?: ContactImportQuality;
+  /** Why starting this import would be refused as a whole (plan contact limit, too many new categories). */
+  problem?: string;
+  [key: string]: unknown;
+}
+
+/** How a unibox sender resolved to a contact. */
+export type ContactLookupMatch = "email" | "thread" | (string & {});
+
+/** Params for {@link Contacts.lookup}. Send `email`, `thread_id`, or both. */
+export interface ContactLookupParams {
+  /** The sender's address, bare or as `Display Name <addr@example.com>`. */
+  email?: string;
+  /** A unibox thread id, which resolves a reply from an alias back to the lead. Also needs `READ_UNIBOX`. */
+  thread_id?: string;
+  /** Narrows a thread lookup to one mailbox. */
+  account_id?: string;
+  [key: string]: unknown;
+}
+
+/** The answer of {@link Contacts.lookup}. `contact` is `null` when nothing matched. */
+export interface ContactLookup {
+  contact: Contact | null;
+  /** How it matched; absent when `contact` is null. */
+  match?: ContactLookupMatch;
+  [key: string]: unknown;
+}
+
+/** Body for {@link Contacts.export}. */
+export interface ContactExportParams {
+  /** `csv`, `xlsx` or `json`. */
+  format?: "csv" | "xlsx" | "json";
+  /** `all`, `filtered` (uses `filters`) or `selected` (uses `contact_ids`). */
+  scope?: "all" | "filtered" | "selected";
+  contact_ids?: string[];
+  filters?: ContactSearchFilters;
+  /** Column identifiers in display order, including `custom:<key>`. Empty uses the default columns. */
+  fields?: string[];
+  /** The filename without extension. */
+  filename?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * What {@link Contacts.export} decodes: the file's text for `csv`, the parsed document for
+ * `json`. A `xlsx` export is binary and the REST client decodes every body as text, so
+ * request `csv` or `json` here.
+ */
+export type ContactExportData = string | unknown[] | Record<string, unknown>;
 
 /** A segment as seen from one contact: whether it is a member, and any override. */
 export interface ContactSegmentMembership {
@@ -344,6 +657,13 @@ export interface ContactSegmentMembership {
   [key: string]: unknown;
 }
 
+// Appends the file part, naming it only when there is a name: a non-spec FormData (React
+// Native's, some polyfills) would otherwise stringify an explicit undefined into "undefined".
+function appendFile(form: FormData, file: Blob, filename?: string): void {
+  if (filename !== undefined) form.append("file", file, filename);
+  else form.append("file", file);
+}
+
 /**
  * Manage contacts: search, add, bulk update/delete, import/export, notes, and related
  * resources. Reachable as `warmbly.contacts`.
@@ -355,6 +675,8 @@ export interface ContactSegmentMembership {
 export class Contacts extends APIResource {
   /**
    * Searches contacts. Returns the `data` + `pagination` envelope as an iterable page.
+   * Filters go in the request body; `limit`, `cursor` and `category` are sent as query
+   * parameters, which is where the platform reads them. Needs `READ_CONTACTS`.
    * @example
    * const page = await warmbly.contacts.search({ query: "ceo" });
    */
@@ -371,87 +693,249 @@ export class Contacts extends APIResource {
     return this.searchPage(params);
   }
 
-  // POST /contacts/search returns the data+pagination envelope; wrap it as a Page.
+  // POST /contacts/search takes its filters in the body but reads `limit`, `cursor` and
+  // `category` from the query string, and answers with the data + pagination envelope.
   private async searchPage(params?: ContactSearchParams): Promise<Page<Contact>> {
-    const body: ContactSearchParams = { ...params };
-    const response = await this.http.post<ListResponse<Contact>>("contacts/search", { body });
-    const fetchNext = (cursor: string): Promise<Page<Contact>> =>
-      this.searchPage({ ...params, cursor });
+    const { limit, cursor, category, ...filters } = params ?? {};
+    const response = await this.http.post<ListResponse<Contact>>("contacts/search", {
+      body: filters,
+      query: { limit, cursor, category },
+    });
+    const fetchNext = (next: string): Promise<Page<Contact>> =>
+      this.searchPage({ ...params, cursor: next });
     return new Page<Contact>(response, fetchNext);
   }
 
   /**
-   * Adds contacts in a batch.
+   * Adds contacts in a batch. The platform expects the request body to be the bare array of
+   * contacts (or a single contact object), not an object wrapping it. Needs `WRITE_CONTACTS`.
    * @example
    * await warmbly.contacts.add([{ email: "team@warmbly.com" }]);
    */
   add(contacts: AddContactParams[], opts?: RequestOptions): Promise<Record<string, unknown>> {
     return this.http.post<Record<string, unknown>>("contacts", {
       ...opts,
-      body: { contacts },
+      body: contacts,
     });
   }
 
   /**
-   * Bulk-updates contacts.
+   * Bulk-updates a selection of contacts: add or remove campaigns and categories, edit
+   * fields, or change subscription. Select by `contacts` id list (up to 10,000), or by `all`
+   * plus `filters` and `exclude`. A select-all answers with the count rather than every row.
+   * Needs `BULK_CONTACTS`.
    * @example
-   * await warmbly.contacts.bulkUpdate({ filter: {}, set: { company: "Warmbly" } });
+   * await warmbly.contacts.bulkUpdate({
+   *   contacts: ["c_1", "c_2"],
+   *   add_categories: ["cat_1"],
+   *   subscribe: true,
+   * });
    */
-  bulkUpdate(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+  bulkUpdate(params: BulkUpdateContactsParams): Promise<Record<string, unknown>> {
     return this.http.patch<Record<string, unknown>>("contacts", { body: params });
   }
 
   /**
-   * Bulk-deletes contacts.
+   * Bulk-deletes a selection of contacts. Pass a bare array of contact ids, or the
+   * selection object (`all` plus `filters` and `exclude`). Resolves with no body on
+   * success (204). Needs `BULK_CONTACTS`.
    * @example
-   * await warmbly.contacts.bulkDelete({ ids: ["c_1", "c_2"] });
+   * await warmbly.contacts.bulkDelete(["c_1", "c_2"]);
+   * await warmbly.contacts.bulkDelete({ all: true, filters: { subscribed: false } });
    */
-  bulkDelete(params: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return this.http.delete<Record<string, unknown>>("contacts", { body: params });
+  bulkDelete(selection: string[] | ContactSelection): Promise<void> {
+    return this.http.delete<void>("contacts", { body: selection });
   }
 
   /**
-   * Starts a contacts export.
+   * Exports contacts as a file and returns its content: the text for `csv`, the parsed
+   * document for `json`. Capped at 50,000 rows. The REST client decodes every body as text,
+   * so a binary `xlsx` export is not usable here; request `csv` or `json`. Needs
+   * `READ_CONTACTS`.
    * @example
-   * const job = await warmbly.contacts.export({ format: "csv" });
+   * const csv = (await warmbly.contacts.export({ format: "csv", scope: "all" })) as string;
    */
-  export(params?: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return this.http.post<Record<string, unknown>>("contacts/export", { body: params });
+  export(params?: ContactExportParams): Promise<ContactExportData> {
+    return this.http.post<ContactExportData>("contacts/export", { body: params });
   }
 
   /**
-   * Previews a contacts import without committing it: parses the file and suggests a
-   * column mapping, including a `quality` read on the addresses themselves.
+   * Previews a contacts import without writing anything: uploads the file as
+   * `multipart/form-data` and returns the detected columns, a sample, and a suggested
+   * mapping. Pass the file as a `Blob` or `File`. Needs `WRITE_CONTACTS`.
+   *
+   * For a large file, prefer the background flow ({@link Contacts.createImport}), which
+   * keeps a draft you can resume.
    * @example
-   * const preview = await warmbly.contacts.importPreview({ upload_id: "u_1" });
+   * const preview = await warmbly.contacts.importPreview(new Blob([csv], { type: "text/csv" }), {
+   *   filename: "leads.csv",
+   * });
    */
-  importPreview(params: ContactImportParams): Promise<Record<string, unknown>> {
-    return this.http.post<Record<string, unknown>>("contacts/import/preview", { body: params });
+  importPreview(
+    file: Blob,
+    params?: { filename?: string },
+    opts?: RequestOptions,
+  ): Promise<ContactImportPreview> {
+    const form = new FormData();
+    appendFile(form, file, params?.filename);
+    return this.http.post<ContactImportPreview>("contacts/import/preview", {
+      ...opts,
+      body: form,
+    });
   }
 
   /**
-   * Commits a previously previewed contacts import with the mapping you chose. Capped at
-   * 50,000 rows and gated on `BULK_CONTACTS`, since one call writes the lot. A bad
-   * mapping (no `email` column, an unusable custom-field name) is a 400 on the whole
-   * request, raised before any row is written.
+   * Imports a file synchronously: uploads it as `multipart/form-data` with the `options`
+   * (mapping, dedup, categories, campaigns, segments) as a JSON form field, and answers with
+   * the per-row result. Capped at 50,000 rows and gated on `BULK_CONTACTS`, since one call
+   * writes the lot. A bad mapping (no `email` column, an unusable custom-field name) is a
+   * 400 on the whole request, raised before any row is written. For larger or resumable
+   * imports use {@link Contacts.createImport}.
    * @example
-   * await warmbly.contacts.importCommit({
-   *   upload_id: "u_1",
+   * const result = await warmbly.contacts.importCommit(file, {
    *   mapping: [{ index: 0, target: "email" }],
+   *   has_header: true,
+   *   dedup: "update",
    *   segment_ids: ["seg_1"],
    * });
    */
-  importCommit(params: ContactImportParams): Promise<Record<string, unknown>> {
-    return this.http.post<Record<string, unknown>>("contacts/import/commit", { body: params });
+  importCommit(
+    file: Blob,
+    options: ContactImportOptions,
+    params?: { filename?: string },
+    opts?: RequestOptions,
+  ): Promise<ContactImportResult> {
+    const form = new FormData();
+    appendFile(form, file, params?.filename);
+    form.append("options", JSON.stringify(options));
+    return this.http.post<ContactImportResult>("contacts/import/commit", {
+      ...opts,
+      body: form,
+    });
   }
 
   /**
-   * Looks up a contact by an identifier such as email (via the `lookup` query).
+   * Uploads a contact file once as a background-import draft (`multipart/form-data`) and
+   * returns it with the preview the column mapper needs. Walk it through
+   * {@link Contacts.saveImportDraft}, {@link Contacts.analyzeImport}, and
+   * {@link Contacts.startImport}. Needs `WRITE_CONTACTS`.
    * @example
-   * const c = await warmbly.contacts.lookup({ email: "team@warmbly.com" });
+   * const draft = await warmbly.contacts.createImport(file, { filename: "leads.csv" });
+   * console.log(draft.preview?.suggested_mapping);
    */
-  lookup(params: Record<string, unknown>): Promise<Contact> {
-    return this.http.get<Contact>("contacts/lookup", { query: params });
+  createImport(
+    file: Blob,
+    params?: { filename?: string },
+    opts?: RequestOptions,
+  ): Promise<ContactImport> {
+    const form = new FormData();
+    appendFile(form, file, params?.filename);
+    return this.http.post<ContactImport>("contacts/imports", { ...opts, body: form });
+  }
+
+  /**
+   * Lists background imports, newest first, auto-paginating when iterated. Needs
+   * `READ_CONTACTS`.
+   * @example
+   * for await (const imp of await warmbly.contacts.listImports()) console.log(imp.status);
+   */
+  listImports(params?: ListContactImportsParams): Promise<Page<ContactImport>> {
+    return this.http.getPage<ContactImport>("contacts/imports", { query: params });
+  }
+
+  /**
+   * Retrieves one background import: its progress counters, quality, and (for a draft) the
+   * preview. Needs `READ_CONTACTS`.
+   * @example
+   * const imp = await warmbly.contacts.getImport("imp_1");
+   */
+  getImport(id: string, opts?: RequestOptions): Promise<ContactImport> {
+    return this.http.get<ContactImport>(this.path("contacts", "imports", id), opts);
+  }
+
+  /**
+   * Autosaves a draft's mapping and options so a reload resumes it. Idempotent by nature.
+   * Needs `WRITE_CONTACTS`.
+   * @example
+   * await warmbly.contacts.saveImportDraft("imp_1", {
+   *   mapping: [{ index: 0, target: "email" }],
+   *   has_header: true,
+   *   dedup: "skip",
+   * });
+   */
+  saveImportDraft(id: string, options: ContactImportOptions): Promise<ContactImport> {
+    return this.http.patch<ContactImport>(this.path("contacts", "imports", id), {
+      body: options,
+    });
+  }
+
+  /**
+   * Reports what a draft would do under a mapping, over the whole file, writing nothing:
+   * how many rows are new, existing, duplicated, invalid, or in conflict, and why starting
+   * would be refused as a whole. Needs `WRITE_CONTACTS`.
+   * @example
+   * const analysis = await warmbly.contacts.analyzeImport("imp_1", {
+   *   mapping: [{ index: 0, target: "email" }],
+   *   has_header: true,
+   * });
+   * if (analysis.problem) console.warn(analysis.problem);
+   */
+  analyzeImport(id: string, params: AnalyzeContactImportParams): Promise<ContactImportAnalysis> {
+    return this.http.post<ContactImportAnalysis>(this.path("contacts", "imports", id, "analyze"), {
+      body: params,
+    });
+  }
+
+  /**
+   * Starts a draft import with the final options. Starting an import that already started
+   * returns it unchanged, so a retry is safe. Needs `BULK_CONTACTS`.
+   * @example
+   * const running = await warmbly.contacts.startImport("imp_1", {
+   *   mapping: [{ index: 0, target: "email" }],
+   *   has_header: true,
+   *   dedup: "update",
+   * });
+   */
+  startImport(id: string, options: ContactImportOptions): Promise<ContactImport> {
+    return this.http.post<ContactImport>(this.path("contacts", "imports", id, "start"), {
+      body: options,
+    });
+  }
+
+  /**
+   * Cancels a background import. Rows already written stay written. Needs `BULK_CONTACTS`.
+   * @example
+   * await warmbly.contacts.cancelImport("imp_1");
+   */
+  cancelImport(id: string, opts?: RequestOptions): Promise<ContactImport> {
+    return this.http.post<ContactImport>(this.path("contacts", "imports", id, "cancel"), opts);
+  }
+
+  /**
+   * Downloads the failed rows of a finished import as CSV text, every one of them (the
+   * import itself lists only the first 200). Needs `READ_CONTACTS`.
+   * @example
+   * const csv = await warmbly.contacts.importFailures("imp_1");
+   */
+  async importFailures(id: string, opts?: RequestOptions): Promise<string> {
+    const body = await this.http.get<string | undefined>(
+      this.path("contacts", "imports", id, "failed.csv"),
+      opts,
+    );
+    return typeof body === "string" ? body : "";
+  }
+
+  /**
+   * Resolves a sender to a contact in the organization, for an inbox CRM panel. Send an
+   * `email` (bare, or as `Display Name <addr@example.com>`), a `thread_id`, or both; a
+   * `thread_id` resolves a reply from an alias back to the lead. An unknown sender is a 200
+   * with `contact: null`, not a 404. Needs `READ_CONTACTS`, plus `READ_UNIBOX` when
+   * `thread_id` is sent.
+   * @example
+   * const { contact, match } = await warmbly.contacts.lookup({ email: "team@warmbly.com" });
+   */
+  lookup(params: ContactLookupParams): Promise<ContactLookup> {
+    return this.http.get<ContactLookup>("contacts/lookup", { query: params });
   }
 
   /**
@@ -620,23 +1104,23 @@ export class Contacts extends APIResource {
   }
 
   /**
-   * Returns the deals associated with a contact.
+   * Returns the deals associated with a contact, as a bare array.
    * @example
    * const deals = await warmbly.contacts.deals("c_1");
    */
-  deals(id: string, params?: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return this.http.get<Record<string, unknown>>(this.path("contacts", id, "deals"), {
+  deals(id: string, params?: Record<string, unknown>): Promise<Deal[]> {
+    return this.http.get<Deal[]>(this.path("contacts", id, "deals"), {
       query: params,
     });
   }
 
   /**
-   * Lists notes on a contact.
+   * Lists notes on a contact, auto-paginating when iterated. Needs `READ_CONTACTS`.
    * @example
-   * const notes = await warmbly.contacts.listNotes("c_1");
+   * for await (const note of await warmbly.contacts.listNotes("c_1")) console.log(note.content);
    */
-  listNotes(id: string, opts?: RequestOptions): Promise<ContactNote[]> {
-    return this.http.get<ContactNote[]>(this.path("contacts", id, "notes"), opts);
+  listNotes(id: string, params?: { cursor?: string; limit?: number }): Promise<Page<ContactNote>> {
+    return this.http.getPage<ContactNote>(this.path("contacts", id, "notes"), { query: params });
   }
 
   /**

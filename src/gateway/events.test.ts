@@ -38,4 +38,14 @@ describe("WARMBLY_EVENTS", () => {
     expect(names).toContain("BILLING_CREDITS_LOW");
     expect(names).toContain("BILLING_CREDITS_CHANGED");
   });
+
+  it("includes the placement, direct-mail, and import events", () => {
+    const names = Object.keys(WARMBLY_EVENTS);
+    expect(names).toContain("WARMUP_PLACEMENT");
+    expect(names).toContain("PLACEMENT_TEST_UPDATED");
+    expect(names).toContain("DIRECT_EMAIL_OPENED");
+    expect(names).toContain("DIRECT_EMAIL_CLICKED");
+    expect(names).toContain("MAILBOX_IMPORT_PROGRESS");
+    expect(names).toContain("CONTACT_IMPORT_PROGRESS");
+  });
 });
