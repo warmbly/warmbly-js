@@ -23,6 +23,11 @@
   - `crm.bulkUpdateTasks` and `bulkDeleteTasks`, `emails.identity`, `refreshIdentity`, `setDirectTracking`, `updateSync`, `unibox.moveFolder`, `integrations.rotateInboundUrl` and `setSigningKey`, `templates.analyze`, `apiKeys.delete`, and `analytics.direct`, `inboxTagging` and `warmupPlacement`.
   - Gateway events `WARMUP_PLACEMENT`, `PLACEMENT_TEST_UPDATED`, `DIRECT_EMAIL_OPENED`, `DIRECT_EMAIL_CLICKED`, `MAILBOX_IMPORT_PROGRESS` and `CONTACT_IMPORT_PROGRESS`, with `WARMUP`, `PLACEMENT`, `DIRECT` and `IMPORT` intents. Account and email events type `email_account_id`, the key the server sends.
   - 89 newly documented error codes in `ErrorCode`, and many new fields on campaigns, contacts, email accounts, unibox, forms, segments and integrations.
+  - `warmbly.integrations.salesforce`: overview, settings, metadata, users, list views, campaigns, import preview, import sources (create, update, run, delete), activity with retry, and `syncNow`.
+  - CRM sync on `crm` for HubSpot, Pipedrive and Salesforce: settings, metadata, owners and `mapOwner`, `syncHealth`, `syncNow`, retry and discard of sync failures, backfill, CRM contact records (get, refresh, link, update), and list import (`listLists`, `previewListImport`, `importList`).
+  - `contacts.salesforce`, `syncSalesforce` and `unlinkSalesforce`; `integrations.listCommunityApps` and `getCommunityApp`.
+  - OAuth apps: `setLogo`, `removeLogo`, `getListing`, `saveListing`, `deleteListing`, and `listWithAccess`, which also returns `developer_access`.
+  - The `CRM_SYNCED` gateway event with a `CRM` intent, 35 more error codes (CRM, Salesforce, listing, logo and API-key ceilings), mailbox test participation fields, richer placement observation counts, and `external` references on pipelines, deals, tasks and notes.
 
 ## 0.3.0
 
