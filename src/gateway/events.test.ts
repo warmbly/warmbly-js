@@ -48,4 +48,8 @@ describe("WARMBLY_EVENTS", () => {
     expect(names).toContain("MAILBOX_IMPORT_PROGRESS");
     expect(names).toContain("CONTACT_IMPORT_PROGRESS");
   });
+
+  it("includes the CRM sync event", () => {
+    expect(Object.keys(WARMBLY_EVENTS)).toContain("CRM_SYNCED");
+  });
 });

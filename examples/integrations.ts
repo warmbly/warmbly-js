@@ -65,3 +65,8 @@ const bookings = await warmbly.integrations.bookings({
   to: "2026-06-15",
 });
 console.log("bookings", bookings);
+
+// Browse the community directory of third-party apps built on Warmbly.
+for await (const app of await warmbly.integrations.listCommunityApps({ limit: 20 })) {
+  console.log("community app", app.slug, app.installs, app.installed ? "(installed)" : "");
+}

@@ -21,7 +21,62 @@ export type PlacementFolder =
   | "missing"
   | "failed"
   | "cancelled"
+  /** Seen, but the folder could not be classified. */
+  | "unknown"
+  | "archive"
+  /** Filed in a folder of the seed's own (a rule moved it). */
+  | "custom"
   | (string & {});
+
+/**
+ * An instrument reading with its denominator, missingness and a 95% Wilson interval. It
+ * describes what seed or warmup mailboxes observed, not a real recipient's inbox
+ * probability.
+ */
+export interface ObservationMetric {
+  version: string;
+  /** `seed_panel`, `warmup_pool` or `warmup_pool_major_providers`. */
+  population: string;
+  denominator_kind: string;
+  /** `fraction` (0..1) or `percent` (0..100). */
+  unit: "fraction" | "percent" | (string & {});
+  source: string;
+  classification_policy: string;
+  numerator: number;
+  denominator: number;
+  /** Observations left out of the denominator. */
+  unresolved: number;
+  window_days?: number;
+  window_basis: string;
+  missingness_basis: string;
+  /** `null` when there is no denominator. */
+  value: number | null;
+  wilson_95_independence_interval: { lower: number; upper: number; [key: string]: unknown } | null;
+  [key: string]: unknown;
+}
+
+/** What the receiving mailbox saw on one copy: authentication, alignment, TLS and one-click headers. */
+export interface ReceivedEvidence {
+  version: string;
+  source: string;
+  trust: string;
+  observed_at: string;
+  spf: string;
+  dkim: string;
+  dmarc: string;
+  alignment: string;
+  tls: string;
+  from_domain?: string;
+  envelope_domain_claim?: string;
+  signing_domain_claim?: string;
+  selector_claim?: string;
+  authentication_results_present: boolean;
+  one_click_headers_present: boolean;
+  one_click_signing_claim: boolean;
+  one_click_compliance: string;
+  dkim_verification?: Record<string, unknown>;
+  [key: string]: unknown;
+}
 
 /**
  * Open and click tracking for a test's copies. `campaign` copies the campaign's own
@@ -76,6 +131,20 @@ export interface PlacementCounts {
   missing: number;
   failed: number;
   cancelled: number;
+  /** Seen in a folder that could not be classified. */
+  unknown?: number;
+  archive?: number;
+  custom?: number;
+  /** Every copy a seed reported seeing: classified plus unknown, archive and custom. */
+  observed_receipts?: number;
+  /** Copies with a verdict: inbox + promotions + other + spam. */
+  classified_receipts?: number;
+  /** Missing plus pending. */
+  unresolved?: number;
+  /** Inbox share of classified receipts, with its interval. */
+  primary_metric?: ObservationMetric | null;
+  /** Inbox, promotions and other share of classified receipts. */
+  non_spam_metric?: ObservationMetric | null;
   /** Every copy that left and got a verdict: inbox + promotions + other + spam + missing. */
   delivered: number;
   /** Primary-inbox share of `delivered`, 0..1. `null` until something is delivered. */
@@ -149,6 +218,11 @@ export interface PlacementResult {
   sent_at: string | null;
   detected_at: string | null;
   error?: string;
+  /** The folder the copy was first seen in, before any rule or user moved it. */
+  first_folder?: string;
+  observed_at?: string;
+  /** What the seed's mailbox reported about the copy's authentication. */
+  evidence?: ReceivedEvidence;
   [key: string]: unknown;
 }
 

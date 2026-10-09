@@ -379,6 +379,8 @@ export type CampaignLeadHoldSource =
   | "out_of_office"
   | "inbox_tagging"
   | "cc"
+  /** A CRM rule: a lead status, a conversion, or an open opportunity in Salesforce. */
+  | "crm"
   | (string & {});
 
 /**

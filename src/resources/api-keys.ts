@@ -83,6 +83,13 @@ export interface PermissionCatalog {
     full_access: number;
     [key: string]: unknown;
   };
+  /**
+   * The widest mask the caller may put on a key: a member's role ceiling, or the calling
+   * key's own permissions. Asking for more is a 403 with code `api_key_permissions_exceed_caller`.
+   */
+  grantable?: number;
+  /** Every scope a third-party OAuth app may request (all but `API_KEYS`). */
+  app_scopes?: number;
   [key: string]: unknown;
 }
 
@@ -136,7 +143,9 @@ export interface ApiKeyLogsParams {
 /**
  * Manage API keys: create, list, inspect, revoke, delete, and read usage analytics and logs.
  * Reachable as `warmbly.apiKeys`. Every method except {@link ApiKeys.revokeSelf} needs the
- * `API_KEYS` scope.
+ * `API_KEYS` scope. Creating, updating, revoking and deleting keys is refused to an OAuth app
+ * token (403, code `oauth_token_not_allowed`), and a key can never be given more than its
+ * creator holds (403, code `api_key_permissions_exceed_caller`).
  *
  * @example
  * const created = await warmbly.apiKeys.create({

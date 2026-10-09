@@ -339,3 +339,56 @@ describe("Integrations", () => {
     expect(result).toEqual({ bookings: [] });
   });
 });
+
+describe("Integrations community directory", () => {
+  const app = {
+    application_id: "app_1",
+    slug: "acme-sync",
+    name: "Acme Sync",
+    tagline: "Two-way sync with Acme",
+    description: "Keeps Acme and Warmbly in step.",
+    category: "crm",
+    logo_url: "https://cdn.warmbly.com/oauth-app-logos/app_1.png",
+    website_url: "https://acme.example.com",
+    install_url: "https://acme.example.com/install",
+    support_url: "",
+    privacy_url: "https://acme.example.com/privacy",
+    developer: "Acme Inc",
+    scopes: 6,
+    permissions: [
+      { name: "READ_CAMPAIGNS", value: 2, description: "View campaigns", category: "read" },
+      { name: "READ_CONTACTS", value: 4, description: "View contacts", category: "read" },
+    ],
+    status: "featured",
+    listed: true,
+    installs: 12,
+    installed: false,
+    published_at: "2026-09-01T00:00:00Z",
+  };
+
+  it("listCommunityApps returns a Page and passes the cursor and limit", async () => {
+    const { http, fetchMock } = clientWith({
+      data: [app],
+      pagination: { total: 1, next_cursor: null, has_more: false },
+    });
+    const page = await new Integrations(http).listCommunityApps({ limit: 50, cursor: "o:50" });
+    const { url, init } = lastCall(fetchMock);
+    const parsed = new URL(url);
+    expect(init.method).toBe("GET");
+    expect(parsed.pathname).toBe("/v1/integrations/community");
+    expect(parsed.searchParams.get("limit")).toBe("50");
+    expect(parsed.searchParams.get("cursor")).toBe("o:50");
+    expect(page.data[0]?.permissions[1]?.name).toBe("READ_CONTACTS");
+    expect(page.pagination.total).toBe(1);
+  });
+
+  it("getCommunityApp GETs one listing by slug", async () => {
+    const { http, fetchMock } = clientWith(app);
+    const out = await new Integrations(http).getCommunityApp("acme-sync");
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("GET");
+    expect(new URL(url).pathname).toBe("/v1/integrations/community/acme-sync");
+    expect(out.installs).toBe(12);
+    expect(out.status).toBe("featured");
+  });
+});

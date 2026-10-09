@@ -128,9 +128,10 @@ export interface ListAdvisorParams {
  * configuration, warmup, campaign performance, copy, and list quality. Reachable as
  * `warmbly.advisor`.
  *
- * Reads need `READ_ANALYTICS`. Applying or undoing a fix carries no scope of its own:
- * the change runs through the tool it actually uses and is refused if the credential
- * lacks that tool's permission, so a read-only key can see advice but not act on it.
+ * Every route needs `READ_ANALYTICS`. Applying or undoing a fix then runs the change
+ * through the tool it actually uses, as the caller, and is refused if the credential lacks
+ * that tool's permission, so a read-only key can see advice but not act on it. A key
+ * limited to some mailboxes can only apply or undo a fix that touches those mailboxes.
  *
  * @example
  * const { score } = await warmbly.advisor.summary();
@@ -186,7 +187,7 @@ export class Advisor extends APIResource {
   /**
    * Applies a finding's fix and returns the updated finding. Applying twice is a no-op
    * that returns the first outcome, so retries are safe without an `Idempotency-Key`.
-   * Requires whatever permission the underlying change needs.
+   * Needs `READ_ANALYTICS` plus whatever permission the underlying change needs.
    *
    * @example
    * const applied = await warmbly.advisor.apply("rec_1");
@@ -198,7 +199,8 @@ export class Advisor extends APIResource {
   }
 
   /**
-   * Reverts a previously applied fix.
+   * Reverts a previously applied fix. Needs `READ_ANALYTICS` plus whatever permission the
+   * underlying change needs.
    * @example
    * await warmbly.advisor.undo("rec_1");
    */

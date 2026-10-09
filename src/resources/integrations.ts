@@ -1,8 +1,66 @@
+import type { HttpClient } from "../core/http";
+import type { Page } from "../core/pagination";
 import type { RequestOptions } from "../core/types";
 import { APIResource } from "./base";
+import { Salesforce } from "./salesforce";
 
 /** An available integration in the catalog. Documented-but-open shape. */
 export interface IntegrationCatalogEntry {
+  /** Whether the instance has the provider's OAuth credentials (an unconfigured one is "coming soon"). */
+  configured?: boolean;
+  /** The provider's popularity on this instance, 1 being the most used. */
+  rank?: number;
+  [key: string]: unknown;
+}
+
+/** Where a community directory listing can be seen. */
+export type AppListingStatus = "published" | "featured" | "hidden" | (string & {});
+
+/**
+ * A third-party app in the community directory, as a browsing workspace sees it: its public
+ * face, publisher and reach, and whether this workspace already uses it. No credential,
+ * redirect or webhook field is ever included.
+ */
+export interface CommunityApp {
+  application_id: string;
+  slug: string;
+  name: string;
+  tagline: string;
+  description: string;
+  /** `crm`, `automation`, `notifications`, `meetings`, `data`, `verification`, `ai` or `other`. */
+  category: string;
+  logo_url: string;
+  website_url: string;
+  install_url: string;
+  support_url: string;
+  privacy_url: string;
+  /** The publishing workspace. */
+  developer: string;
+  /** The scopes the app requests, as a permission bitmask. */
+  scopes: number;
+  /** `scopes` spelled out. */
+  permissions: Array<{
+    name: string;
+    value: number;
+    description: string;
+    category: string;
+    [key: string]: unknown;
+  }>;
+  status: AppListingStatus;
+  /** Shown in discovery, because it is featured or widely used. */
+  listed: boolean;
+  installs: number;
+  /** Whether this workspace already authorized the app. */
+  installed: boolean;
+  published_at: string;
+  [key: string]: unknown;
+}
+
+/** Query params for {@link Integrations.listCommunityApps}. */
+export interface ListCommunityAppsParams {
+  cursor?: string;
+  /** Page size (1..200, default 100). */
+  limit?: number;
   [key: string]: unknown;
 }
 
@@ -86,8 +144,9 @@ export interface IntegrationConnectionDetail extends IntegrationConnection {
 }
 
 /**
- * Manage third-party integrations: catalog, connections, events, field mappings, runs,
- * webhook secret, inbound signing key, test/push, and bookings. Reachable as
+ * Manage third-party integrations: catalog, the community app directory, connections,
+ * events, field mappings, runs, webhook secret, inbound signing key, test/push, bookings,
+ * and the native Salesforce sync (`warmbly.integrations.salesforce`). Reachable as
  * `warmbly.integrations`. Reads need the `INTEGRATIONS` scope (or the matching dashboard
  * permissions); writes need `INTEGRATIONS`.
  *
@@ -97,6 +156,20 @@ export interface IntegrationConnectionDetail extends IntegrationConnection {
  */
 export class Integrations extends APIResource {
   /**
+   * The native Salesforce sync of a Salesforce connection: health, settings, imports and
+   * the activity log. See {@link Salesforce}.
+   *
+   * @example
+   * const o = await warmbly.integrations.salesforce.overview("conn_1");
+   */
+  readonly salesforce: Salesforce;
+
+  constructor(http: HttpClient) {
+    super(http);
+    this.salesforce = new Salesforce(http);
+  }
+
+  /**
    * Lists available integrations.
    * @example
    * const catalog = await warmbly.integrations.catalog();
@@ -105,6 +178,29 @@ export class Integrations extends APIResource {
     return this.http
       .get<{ catalog: IntegrationCatalogEntry[] }>("integrations/catalog", { query: params })
       .then((r) => r.catalog ?? []);
+  }
+
+  /**
+   * Lists the community directory: featured apps first, then the most installed.
+   * Auto-paginates when iterated. Needs `INTEGRATIONS` (members: `manage_settings` or
+   * `use_integrations`).
+   * @example
+   * for await (const app of await warmbly.integrations.listCommunityApps()) {
+   *   console.log(app.name, app.installs, app.installed);
+   * }
+   */
+  listCommunityApps(params?: ListCommunityAppsParams): Promise<Page<CommunityApp>> {
+    return this.http.getPage<CommunityApp>("integrations/community", { query: params });
+  }
+
+  /**
+   * Opens one published app by its slug, listed in discovery or not. A hidden or unknown
+   * slug is a 404. Needs `INTEGRATIONS`.
+   * @example
+   * const app = await warmbly.integrations.getCommunityApp("acme-sync");
+   */
+  getCommunityApp(slug: string, opts?: RequestOptions): Promise<CommunityApp> {
+    return this.http.get<CommunityApp>(this.path("integrations", "community", slug), opts);
   }
 
   /**
@@ -328,7 +424,8 @@ export class Integrations extends APIResource {
   }
 
   /**
-   * Lists meeting bookings synced from connected schedulers.
+   * Lists meeting bookings synced from connected schedulers. Bookings carry invitee
+   * details, so this needs `READ_CONTACTS` (members: `view_contacts`), not `INTEGRATIONS`.
    * @example
    * const bookings = await warmbly.integrations.bookings();
    */

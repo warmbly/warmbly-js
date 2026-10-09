@@ -1,6 +1,7 @@
 import { Page } from "../core/pagination";
 import type { ListResponse, RequestOptions } from "../core/types";
 import { APIResource } from "./base";
+import type { ObservationMetric } from "./placement";
 
 /** A generic analytics report payload. Shape varies by endpoint. */
 export interface AnalyticsReport {
@@ -210,6 +211,23 @@ export interface WarmupPlacementCounts {
   /** `null` until something is delivered. */
   inbox_rate: number | null;
   spam_rate: number | null;
+  /** Seen, but the folder could not be classified. */
+  unknown?: number;
+  archived?: number;
+  /** Filed in a folder of the recipient's own. */
+  custom?: number;
+  /** Receipts carrying the newer observation instrumentation. */
+  instrumented_receipts?: number;
+  /** Every receipt a recipient reported: delivered plus unknown, archived and custom. */
+  observed_receipts?: number;
+  /** Observed receipts from before the instrumentation existed. */
+  legacy_uninstrumented_receipts?: number;
+  /** Spam placements a rescue was asked for (the same count as `rescued`). */
+  rescue_requested?: number;
+  /** Rescues the recipient confirmed; `null` while not instrumented. */
+  rescue_confirmed?: number | null;
+  /** Inbox plus tabs share of delivered, as an observation metric. */
+  non_spam_metric?: ObservationMetric | null;
   [key: string]: unknown;
 }
 
@@ -228,6 +246,8 @@ export interface WarmupPlacementRate {
   band: "good" | "fair" | "poor" | "collecting" | "none" | (string & {});
   other_delivered: number;
   other_inbox_rate: number | null;
+  /** The same rate as an observation metric, with its interval. */
+  metric?: ObservationMetric | null;
   [key: string]: unknown;
 }
 
@@ -239,6 +259,9 @@ export interface WarmupPlacementGroupCounts {
   tabs: number;
   spam: number;
   rescued: number;
+  unknown?: number;
+  archived?: number;
+  custom?: number;
   [key: string]: unknown;
 }
 

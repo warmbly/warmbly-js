@@ -2,8 +2,9 @@ import { Page } from "../core/pagination";
 import type { ListResponse, RequestOptions } from "../core/types";
 import { APIResource } from "./base";
 import type { CampaignLeadCC, CampaignLeadHold } from "./campaigns";
-import type { Deal } from "./crm";
+import type { CrmExternalRef, Deal } from "./crm";
 import type { ImportColumnMapping, ImportDedupStrategy } from "./lead-sync";
+import type { ContactSalesforcePanel, SyncContactSalesforceParams } from "./salesforce";
 
 /** An address verification verdict in Warmbly's vocabulary. */
 export type VerificationStatus = "valid" | "risky" | "invalid" | "unknown";
@@ -18,6 +19,8 @@ export type ContactSource =
   | "form"
   | "automation"
   | "ai_assistant"
+  /** Imported from a connected CRM's list view or campaign. */
+  | "crm_sync"
   | "unknown"
   | (string & {});
 
@@ -99,6 +102,8 @@ export interface ContactNote {
   updated_at?: string;
   /** The note author, when the API joins it. */
   user?: ContactNoteAuthor;
+  /** Set when the note lives in a connected CRM (HubSpot or Pipedrive). */
+  external?: CrmExternalRef;
   [key: string]: unknown;
 }
 
@@ -1133,7 +1138,8 @@ export class Contacts extends APIResource {
   }
 
   /**
-   * Updates a note on a contact. The note text goes in the `content` field.
+   * Updates a note on a contact. The note text goes in the `content` field. The note must
+   * belong to the contact named in the path.
    * @example
    * await warmbly.contacts.updateNote("c_1", "n_1", { content: "Updated" });
    */
@@ -1144,11 +1150,59 @@ export class Contacts extends APIResource {
   }
 
   /**
-   * Deletes a note from a contact.
+   * Deletes a note from a contact. The note must belong to the contact named in the path.
    * @example
    * await warmbly.contacts.deleteNote("c_1", "n_1");
    */
   deleteNote(id: string, noteId: string, opts?: RequestOptions): Promise<void> {
     return this.http.delete<void>(this.path("contacts", id, "notes", noteId), opts);
+  }
+
+  // --- Salesforce ---
+
+  /**
+   * Returns the contact's Salesforce panel: the Leads and Contacts it is linked to in each
+   * connected Salesforce org, with owner, account, opportunities and recent Tasks, read
+   * live when Salesforce answers (`stale` when shown from the stored snapshot). Needs
+   * `READ_CRM` (members: `view_contacts`).
+   *
+   * @example
+   * const panel = await warmbly.contacts.salesforce("c_1");
+   * for (const r of panel.records) console.log(r.object, r.name, r.opportunities.length);
+   */
+  salesforce(id: string, opts?: RequestOptions): Promise<ContactSalesforcePanel> {
+    return this.http.get<ContactSalesforcePanel>(this.path("contacts", id, "salesforce"), opts);
+  }
+
+  /**
+   * Matches the contact in Salesforce (or creates it, as `create_as`) and pushes its mapped
+   * fields, then returns the refreshed panel. Matching runs first, so a retry finds the
+   * record the first attempt created instead of creating another. Needs `INTEGRATIONS`
+   * (members: `use_integrations`).
+   *
+   * @example
+   * const panel = await warmbly.contacts.syncSalesforce("c_1", { create_as: "lead" });
+   */
+  syncSalesforce(
+    id: string,
+    params?: SyncContactSalesforceParams,
+    opts?: RequestOptions,
+  ): Promise<ContactSalesforcePanel> {
+    return this.http.post<ContactSalesforcePanel>(this.path("contacts", id, "salesforce", "sync"), {
+      ...opts,
+      body: params,
+    });
+  }
+
+  /**
+   * Drops the contact's link to one Salesforce record (the panel's `link_id`). Nothing is
+   * deleted in Salesforce. Resolves with no body (204). Needs `INTEGRATIONS` (members:
+   * `use_integrations`).
+   *
+   * @example
+   * await warmbly.contacts.unlinkSalesforce("c_1", "link_1");
+   */
+  unlinkSalesforce(id: string, linkId: string, opts?: RequestOptions): Promise<void> {
+    return this.http.delete<void>(this.path("contacts", id, "salesforce", "links", linkId), opts);
   }
 }

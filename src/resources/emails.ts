@@ -2,6 +2,27 @@ import type { Page } from "../core/pagination";
 import type { RequestOptions } from "../core/types";
 import { APIResource } from "./base";
 
+/**
+ * How a mailbox takes part in placement and diagnostic tests. `legacy` is the old behavior
+ * (and what a mailbox with no setting gets); new mailboxes default to `off`.
+ */
+export type TestParticipationMode = "legacy" | "diagnostic" | "off" | (string & {});
+
+/**
+ * Clears a held send on a mailbox, bound to the hold it answers. Either
+ * `authentication_repaired` evidence from a newer sync, or `operator_provider_confirmation`
+ * with a definitive `evidence_task_id` on the same mailbox and a `confirmation_reference`.
+ * A send of unknown outcome cannot be cleared.
+ */
+export interface SendRecoveryResolution {
+  held_task_id: string;
+  held_reason: string;
+  evidence_type: "authentication_repaired" | "operator_provider_confirmation" | (string & {});
+  evidence_task_id?: string;
+  confirmation_reference?: string;
+  [key: string]: unknown;
+}
+
 /** A connected sending mailbox (email account). Documented-but-open shape. */
 export interface EmailAccount {
   id: string;
@@ -46,6 +67,16 @@ export interface EmailAccount {
   tracking_domain_verified?: boolean;
   /** The mailbox's own IANA zone, when set. */
   timezone?: string;
+  /** Test participation; `null` is legacy. */
+  test_mode?: TestParticipationMode | null;
+  /** With `test_mode: "diagnostic"`, whether the mailbox may send test copies. */
+  test_send_enabled?: boolean;
+  /** With `test_mode: "diagnostic"`, whether the mailbox may receive test copies. */
+  test_receive_enabled?: boolean;
+  /** A calendar-day ceiling across every outbound lane of this mailbox; `null` uses the default. */
+  shared_daily_limit?: number | null;
+  /** A rolling 24-hour ceiling counting each To/CC/BCC recipient; `null` uses the default. */
+  rolling_recipient_limit?: number | null;
   created_at?: string;
   updated_at?: string;
   [key: string]: unknown;
@@ -68,6 +99,16 @@ export interface UpdateEmailParams {
   status?: "active" | "inactive" | "revoked" | (string & {});
   /** Daily cold-campaign cap, 0..5000 (default 50). */
   campaign_limit?: number;
+  /** `diagnostic`, `off` or `legacy`. */
+  test_mode?: TestParticipationMode;
+  test_send_enabled?: boolean;
+  test_receive_enabled?: boolean;
+  /** A calendar-day ceiling across every outbound lane. 0 restores the default. */
+  shared_daily_limit?: number;
+  /** A rolling 24-hour ceiling counting each To/CC/BCC recipient. 0 restores the default. */
+  rolling_recipient_limit?: number;
+  /** Clears a held send; see {@link SendRecoveryResolution}. */
+  send_recovery_resolution?: SendRecoveryResolution;
   min_wait_time?: number;
   reply_to?: string;
   warmup_base?: number;

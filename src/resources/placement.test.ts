@@ -225,6 +225,76 @@ describe("Placement", () => {
     expect(out.compare?.id).toBe("t2");
   });
 
+  it("getTest decodes observed receipts, metrics and received evidence", async () => {
+    const metric = {
+      version: "observed-v2",
+      population: "seed_panel",
+      denominator_kind: "classified_observed_receipts",
+      unit: "fraction",
+      source: "mailbox_observation",
+      classification_policy: "first_folder_v2_with_legacy_classifications",
+      numerator: 8,
+      denominator: 10,
+      unresolved: 2,
+      window_basis: "placement_test_classification_window",
+      missingness_basis: "pending_missing_and_unclassified_copies",
+      value: 0.8,
+      wilson_95_independence_interval: { lower: 0.49, upper: 0.94 },
+    };
+    const { http } = clientWith({
+      data: {
+        ...test,
+        summary: {
+          ...counts,
+          unknown: 1,
+          archive: 1,
+          custom: 0,
+          observed_receipts: 12,
+          classified_receipts: 10,
+          unresolved: 0,
+          primary_metric: metric,
+          non_spam_metric: { ...metric, value: null, wilson_95_independence_interval: null },
+        },
+        results: [
+          {
+            seed: "s***@outlook.com",
+            family: "outlook",
+            family_label: "Outlook",
+            folder: "custom",
+            first_folder: "inbox",
+            observed_at: "2026-09-01T10:02:00Z",
+            scheduled_at: null,
+            sent_at: "2026-09-01T10:01:00Z",
+            detected_at: "2026-09-01T10:03:00Z",
+            evidence: {
+              version: "received-v1",
+              source: "headers",
+              trust: "receiver",
+              observed_at: "2026-09-01T10:02:00Z",
+              spf: "pass",
+              dkim: "pass",
+              dmarc: "pass",
+              alignment: "aligned",
+              tls: "tls",
+              authentication_results_present: true,
+              one_click_headers_present: true,
+              one_click_signing_claim: true,
+              one_click_compliance: "compliant",
+            },
+          },
+        ],
+        content: { score: 100, issues: [] },
+      },
+    });
+    const out = await new Placement(http).getTest("t1");
+    expect(out.summary.primary_metric?.value).toBe(0.8);
+    expect(out.summary.non_spam_metric?.value).toBeNull();
+    expect(out.summary.archive).toBe(1);
+    expect(out.results[0]?.folder).toBe("custom");
+    expect(out.results[0]?.first_folder).toBe("inbox");
+    expect(out.results[0]?.evidence?.dmarc).toBe("pass");
+  });
+
   it("createTest POSTs the body, sends an Idempotency-Key and returns the tests array", async () => {
     const { http, fetchMock } = clientWith(
       { data: [test, { ...test, id: "t2" }] },

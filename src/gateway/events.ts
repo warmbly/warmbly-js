@@ -339,6 +339,26 @@ export interface ContactImportProgressEvent extends GatewayEventBase {
 }
 
 /**
+ * Records mirrored from a connected CRM (HubSpot or Pipedrive) changed: a pull brought
+ * changes in, or a push went out. Carries ids only; refetch the deals, tasks, notes or
+ * contact panel named in `objects`. Not permission-gated beyond org membership, since it
+ * only tells clients to refetch.
+ *
+ * @example
+ * gw.on("CRM_SYNCED", (e) => {
+ *   if (e.objects?.includes("deal")) refetchDeals();
+ * });
+ */
+export interface CrmSyncedEvent extends GatewayEventBase {
+  event_type: "CRM_SYNCED";
+  org_id?: string;
+  /** What changed: `contact`, `deal`, `task`, `note`, `owner`, `pipeline`, ... */
+  objects?: Array<"contact" | "deal" | "task" | "note" | "owner" | "pipeline" | (string & {})>;
+  /** Set when the change was about one contact. */
+  contact_id?: string;
+}
+
+/**
  * An AI contact-research run finished. Fires once per completed run, so a batch
  * reports progress as it drains.
  *
@@ -452,6 +472,9 @@ export interface WarmblyEventMap {
   /** A background contact import moved (gated on `view_contacts`). */
   CONTACT_IMPORT_PROGRESS: ContactImportProgressEvent;
 
+  /** Mirrored records of a connected CRM changed; refetch what `objects` names. */
+  CRM_SYNCED: CrmSyncedEvent;
+
   PAGE_HIT: PageHitEvent;
   FORM_SUBMISSION_CREATED: FormSubmissionEvent;
 
@@ -527,6 +550,8 @@ export const WARMBLY_EVENTS = {
   CONTACT_DELETED: "CONTACT_DELETED",
   CONTACTS_RELOAD: "CONTACTS_RELOAD",
   CONTACT_IMPORT_PROGRESS: "CONTACT_IMPORT_PROGRESS",
+
+  CRM_SYNCED: "CRM_SYNCED",
 
   PAGE_HIT: "PAGE_HIT",
   FORM_SUBMISSION_CREATED: "FORM_SUBMISSION_CREATED",

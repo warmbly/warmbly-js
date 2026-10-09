@@ -30,6 +30,7 @@ export type {
   ContactsReloadEvent,
   CreditsChangedEvent,
   CreditsLowEvent,
+  CrmSyncedEvent,
   CustomEvent,
   DirectEmailEvent,
   EmailEvent,

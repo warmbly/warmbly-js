@@ -91,6 +91,36 @@ describe("Emails", () => {
     });
   });
 
+  describe("test participation and send limits", () => {
+    it("PATCHes the participation, limits and a recovery resolution, and decodes them", async () => {
+      const { http, fetchMock } = clientWith({
+        id: "mb1",
+        test_mode: "diagnostic",
+        test_send_enabled: true,
+        test_receive_enabled: false,
+        shared_daily_limit: 120,
+        rolling_recipient_limit: null,
+      });
+      const params = {
+        test_mode: "diagnostic",
+        test_send_enabled: true,
+        test_receive_enabled: false,
+        shared_daily_limit: 120,
+        send_recovery_resolution: {
+          held_task_id: "task_1",
+          held_reason: "auth_failed",
+          evidence_type: "authentication_repaired",
+        },
+      } as const;
+      const out = await new Emails(http).update("mb1", params);
+      const { init } = lastCall(fetchMock);
+      expect(init.method).toBe("PATCH");
+      expect(JSON.parse(String(init.body))).toEqual(params);
+      expect(out.test_mode).toBe("diagnostic");
+      expect(out.rolling_recipient_limit).toBeNull();
+    });
+  });
+
   describe("delete", () => {
     it("DELETEs /emails/:id", async () => {
       const { http, fetchMock } = clientWith(undefined, { status: 200 });

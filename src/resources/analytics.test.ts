@@ -375,4 +375,87 @@ describe("Analytics placement and direct mail", () => {
     expect(out.providers[0]?.hosts[0]?.host).toBe("gmail");
     expect(out.mailboxes).toBeUndefined();
   });
+
+  it("warmupPlacement decodes the observation counts and metrics", async () => {
+    const metric = {
+      version: "observed-v2",
+      population: "warmup_pool_major_providers",
+      denominator_kind: "classified_observed_receipts",
+      unit: "percent",
+      source: "mailbox_observation",
+      classification_policy: "first_folder_v2_with_legacy_classifications",
+      numerator: 16,
+      denominator: 18,
+      unresolved: 0,
+      window_days: 7,
+      window_basis: "trailing_utc_days",
+      missingness_basis: "not_instrumented_in_legacy_window_counters",
+      value: 88.9,
+      wilson_95_independence_interval: { lower: 67.2, upper: 96.9 },
+    };
+    const counts = {
+      sent: 20,
+      delivered: 18,
+      inbox: 14,
+      tabs: 2,
+      spam: 2,
+      rescued: 1,
+      unconfirmed: 1,
+      inbox_rate: 88.89,
+      spam_rate: 11.11,
+      unknown: 1,
+      archived: 0,
+      custom: 1,
+      instrumented_receipts: 15,
+      observed_receipts: 20,
+      legacy_uninstrumented_receipts: 5,
+      rescue_requested: 1,
+      rescue_confirmed: null,
+      non_spam_metric: { ...metric, population: "warmup_pool" },
+    };
+    const { http } = clientWith({
+      email_account_id: "mb1",
+      summary: counts,
+      rate: {
+        window_days: 7,
+        min_sample: 20,
+        scope: "major",
+        delivered: 18,
+        inbox: 14,
+        tabs: 2,
+        spam: 2,
+        inbox_rate: 88.9,
+        band: "good",
+        other_delivered: 0,
+        other_inbox_rate: null,
+        metric,
+      },
+      daily: [
+        {
+          date: "2026-09-01",
+          ...counts,
+          rolling_inbox_rate: 88.9,
+          groups: [
+            {
+              group: "google",
+              inbox: 5,
+              tabs: 1,
+              spam: 0,
+              rescued: 0,
+              unknown: 1,
+              archived: 0,
+              custom: 0,
+            },
+          ],
+        },
+      ],
+      providers: [],
+    });
+    const out = await new Analytics(http).warmupPlacement({ email_id: "mb1" });
+    expect(out.summary.observed_receipts).toBe(20);
+    expect(out.summary.rescue_confirmed).toBeNull();
+    expect(out.summary.non_spam_metric?.population).toBe("warmup_pool");
+    expect(out.rate.metric?.wilson_95_independence_interval?.lower).toBe(67.2);
+    expect(out.daily[0]?.groups[0]?.unknown).toBe(1);
+  });
 });

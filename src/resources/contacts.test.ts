@@ -763,3 +763,99 @@ describe("Contacts: background imports", () => {
     await expect(new Contacts(http).importFailures("imp_1")).resolves.toBe("");
   });
 });
+
+describe("Contacts Salesforce panel", () => {
+  const panel = {
+    connections: [
+      {
+        id: "conn_1",
+        label: "Acme Salesforce",
+        environment: "production",
+        instance_url: "https://acme.my.salesforce.com",
+      },
+    ],
+    records: [
+      {
+        link_id: "link_1",
+        connection_id: "conn_1",
+        connection_label: "Acme Salesforce",
+        object: "Lead",
+        id: "00Q5g00000AbCdE",
+        url: "https://acme.my.salesforce.com/00Q5g00000AbCdE",
+        name: "Ana Diaz",
+        company: "Acme",
+        status: "Working - Contacted",
+        owner: { id: "005", name: "Bo Ray" },
+        is_converted: false,
+        opted_out: false,
+        opportunities: [
+          {
+            id: "006",
+            name: "Acme rollout",
+            stage: "Prospecting",
+            amount: 5000,
+            is_closed: false,
+            is_won: false,
+            url: "https://acme.my.salesforce.com/006",
+          },
+        ],
+        tasks: [
+          {
+            id: "00T",
+            subject: "Email: Quick question",
+            status: "Completed",
+            url: "https://acme.my.salesforce.com/00T",
+            from_warmbly: true,
+          },
+        ],
+        linked_by: "match",
+        sync: { pending: 0, failed: 1, synced: 12, last_error: "INVALID_FIELD" },
+        stale: false,
+      },
+    ],
+    can_sync: true,
+  };
+
+  it("salesforce GETs the panel", async () => {
+    const { http, fetchMock } = clientWithSequence([{ body: panel }]);
+    const out = await new Contacts(http).salesforce("c_1");
+    const { url, init } = callAt(fetchMock, 0);
+    expect(init.method).toBe("GET");
+    expect(new URL(url).pathname).toBe("/v1/contacts/c_1/salesforce");
+    expect(out.records[0]?.opportunities[0]?.amount).toBe(5000);
+    expect(out.records[0]?.tasks[0]?.from_warmbly).toBe(true);
+    expect(out.can_sync).toBe(true);
+  });
+
+  it("syncSalesforce POSTs the options and returns the refreshed panel", async () => {
+    const { http, fetchMock } = clientWithSequence([{ body: panel }]);
+    const out = await new Contacts(http).syncSalesforce(
+      "c_1",
+      { connection_id: "conn_1", create_as: "contact" },
+      { idempotencyKey: "sf-sync-c_1" },
+    );
+    const { url, init } = callAt(fetchMock, 0);
+    expect(init.method).toBe("POST");
+    expect(new URL(url).pathname).toBe("/v1/contacts/c_1/salesforce/sync");
+    expect(JSON.parse(String(init.body))).toEqual({
+      connection_id: "conn_1",
+      create_as: "contact",
+    });
+    expect((init.headers as Record<string, string>)["Idempotency-Key"]).toBe("sf-sync-c_1");
+    expect(out.records[0]?.link_id).toBe("link_1");
+  });
+
+  it("syncSalesforce sends no body when there are no options", async () => {
+    const { http, fetchMock } = clientWithSequence([{ body: panel }]);
+    await new Contacts(http).syncSalesforce("c_1");
+    expect(callAt(fetchMock, 0).init.body).toBeUndefined();
+  });
+
+  it("unlinkSalesforce DELETEs the link and resolves void on 204", async () => {
+    const { http, fetchMock } = clientWithSequence([{ body: undefined, status: 204 }]);
+    await expect(new Contacts(http).unlinkSalesforce("c_1", "link_1")).resolves.toBeUndefined();
+    const { url, init } = callAt(fetchMock, 0);
+    expect(init.method).toBe("DELETE");
+    expect(new URL(url).pathname).toBe("/v1/contacts/c_1/salesforce/links/link_1");
+  });
+});

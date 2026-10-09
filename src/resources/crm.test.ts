@@ -432,3 +432,294 @@ describe("Crm tasks", () => {
     expect(url).toContain("/crm/tasks/tk_1");
   });
 });
+
+describe("Crm sync with a connected CRM", () => {
+  const view = {
+    provider: "hubspot",
+    linked: true,
+    external_id: "901",
+    url: "https://app.hubspot.com/contacts/1/record/0-1/901",
+    owner: {
+      external_id: "77",
+      email: "bo@acme.com",
+      first_name: "Bo",
+      last_name: "Ray",
+      user_id: "user_1",
+      user_pinned: false,
+      archived: false,
+    },
+    lifecycle_stage: { value: "lead", label: "Lead" },
+    lead_status: { value: "IN_PROGRESS", label: "In progress" },
+    company: { external_id: "55", name: "Acme", domain: "acme.com" },
+    opted_out: false,
+    properties: [{ name: "jobtitle", label: "Job title", value: "CTO" }],
+    synced_at: "2026-10-08T09:00:00Z",
+  };
+
+  function body(fetchMock: ReturnType<typeof vi.fn>): unknown {
+    const raw = lastCall(fetchMock).init.body;
+    return typeof raw === "string" ? JSON.parse(raw) : undefined;
+  }
+
+  it("getSettings GETs /crm/settings and decodes the mode and account", async () => {
+    const { client, fetchMock } = crm({
+      organization_id: "org_1",
+      provider: "pipedrive",
+      connection_id: "conn_1",
+      config: {
+        activity: {
+          sent: true,
+          replies: true,
+          bounces: true,
+          unsubscribes: true,
+          opens: false,
+          clicks: false,
+          meetings: true,
+        },
+        create_contacts: true,
+        create_companies: true,
+        write_properties: true,
+        positive_reply: { lead_status: "", lifecycle_stage: "", create_deal: false },
+        exit_rules: { deal_created: true, lifecycle_stages: [], opted_out: true },
+        guards: {
+          skip_lifecycle_stages: [],
+          skip_open_deals: true,
+          skip_other_owners: false,
+          skip_opted_out: true,
+        },
+        deal_pipelines: [],
+        display_properties: [],
+        field_map: { first_name: "first_name" },
+        field_direction: { first_name: "both" },
+        for: "pipedrive",
+      },
+      updated_at: "2026-10-08T09:00:00Z",
+      account: {
+        external_id: "123",
+        name: "Acme",
+        app_url: "https://acme.pipedrive.com",
+        status: "active",
+        health: "healthy",
+        missing_scopes: ["deals:full"],
+      },
+    });
+    const out = await client.getSettings();
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("GET");
+    expect(new URL(url).pathname).toBe("/v1/crm/settings");
+    expect(out.provider).toBe("pipedrive");
+    expect(out.config.field_direction.first_name).toBe("both");
+    expect(out.account?.missing_scopes).toEqual(["deals:full"]);
+  });
+
+  it("updateSettings PUTs the body", async () => {
+    const { client, fetchMock } = crm({
+      organization_id: "org_1",
+      provider: "hubspot",
+      config: {},
+      updated_at: "t",
+    });
+    const out = await client.updateSettings({
+      provider: "hubspot",
+      connection_id: "conn_1",
+      complete_setup: true,
+    });
+    expect(lastCall(fetchMock).init.method).toBe("PUT");
+    expect(lastCall(fetchMock).url).toContain("/crm/settings");
+    expect(body(fetchMock)).toEqual({
+      provider: "hubspot",
+      connection_id: "conn_1",
+      complete_setup: true,
+    });
+    expect(out.provider).toBe("hubspot");
+  });
+
+  it("metadata GETs /crm/metadata", async () => {
+    const { client, fetchMock } = crm({
+      lifecycle_stages: [{ value: "lead", label: "Lead" }],
+      lead_statuses: [],
+      task_types: [{ value: "CALL", label: "Call" }],
+      properties: [
+        { name: "jobtitle", label: "Job title", type: "string", group_name: "x", read_only: false },
+      ],
+      pipelines: [{ value: "default", label: "Sales" }],
+    });
+    const out = await client.metadata();
+    expect(lastCall(fetchMock).init.method).toBe("GET");
+    expect(lastCall(fetchMock).url).toContain("/crm/metadata");
+    expect(out.properties[0]?.name).toBe("jobtitle");
+  });
+
+  it("listOwners unwraps data", async () => {
+    const { client, fetchMock } = crm({ data: [view.owner] });
+    const owners = await client.listOwners();
+    expect(lastCall(fetchMock).url).toContain("/crm/owners");
+    expect(owners[0]?.external_id).toBe("77");
+  });
+
+  it("mapOwner PUTs user_id (null clears) and resolves void on 204", async () => {
+    const { client, fetchMock } = crm(undefined, { status: 204 });
+    await expect(client.mapOwner("77", null)).resolves.toBeUndefined();
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("PUT");
+    expect(new URL(url).pathname).toBe("/v1/crm/owners/77");
+    expect(body(fetchMock)).toEqual({ user_id: null });
+  });
+
+  it("syncHealth GETs /crm/sync", async () => {
+    const { client, fetchMock } = crm({
+      pending: 3,
+      failed: 1,
+      done_24h: 120,
+      last_synced_at: "2026-10-08T09:00:00Z",
+      cursors: [{ object_type: "deal", cursor_at: "2026-10-08T08:59:00Z" }],
+      failures: [
+        {
+          id: "job_1",
+          organization_id: "org_1",
+          provider: "hubspot",
+          kind: "push_deal",
+          subject: "Acme rollout",
+          status: "failed",
+          attempts: 5,
+          next_attempt_at: "t",
+          last_error: "HubSpot refused",
+          created_at: "t",
+          updated_at: "t",
+        },
+      ],
+      counts: { contacts: 900, deals: 40, tasks: 12, pipelines: 2, owners: 5 },
+    });
+    const out = await client.syncHealth();
+    expect(lastCall(fetchMock).init.method).toBe("GET");
+    expect(new URL(lastCall(fetchMock).url).pathname).toBe("/v1/crm/sync");
+    expect(out.failures[0]?.kind).toBe("push_deal");
+    expect(out.counts.contacts).toBe(900);
+  });
+
+  it("syncNow POSTs /crm/sync and resolves void on 202", async () => {
+    const { client, fetchMock } = crm(undefined, { status: 202 });
+    await expect(client.syncNow()).resolves.toBeUndefined();
+    expect(lastCall(fetchMock).init.method).toBe("POST");
+    expect(new URL(lastCall(fetchMock).url).pathname).toBe("/v1/crm/sync");
+  });
+
+  it("retrySyncFailures and discardSyncFailures POST ids, or an empty body for all", async () => {
+    const { client, fetchMock } = crm({ affected: 2 });
+    expect(await client.retrySyncFailures(["job_1", "job_2"])).toEqual({ affected: 2 });
+    expect(lastCall(fetchMock).url).toContain("/crm/sync/retry");
+    expect(body(fetchMock)).toEqual({ ids: ["job_1", "job_2"] });
+    await client.discardSyncFailures();
+    expect(lastCall(fetchMock).init.method).toBe("POST");
+    expect(lastCall(fetchMock).url).toContain("/crm/sync/discard");
+    expect(body(fetchMock)).toEqual({});
+  });
+
+  it("backfillPreview GETs and startBackfill POSTs with an idempotency key", async () => {
+    const { client, fetchMock } = crm({ deals: 4, tasks: 9, notes: 30 });
+    const preview = await client.backfillPreview();
+    expect(lastCall(fetchMock).init.method).toBe("GET");
+    expect(lastCall(fetchMock).url).toContain("/crm/backfill");
+    expect(preview.notes).toBe(30);
+
+    const accepted = crm(undefined, { status: 202 });
+    await expect(
+      accepted.client.startBackfill({ deals: true, notes: true }, { idempotencyKey: "bf-1" }),
+    ).resolves.toBeUndefined();
+    const call = lastCall(accepted.fetchMock);
+    expect(call.init.method).toBe("POST");
+    expect(call.url).toContain("/crm/backfill");
+    expect((call.init.headers as Record<string, string>)["Idempotency-Key"]).toBe("bf-1");
+    expect(body(accepted.fetchMock)).toEqual({ deals: true, notes: true });
+  });
+
+  it("getContactRecord, refreshContactRecord and linkContactRecord hit the contact routes", async () => {
+    const { client, fetchMock } = crm(view);
+    const got = await client.getContactRecord("c_1");
+    expect(lastCall(fetchMock).init.method).toBe("GET");
+    expect(new URL(lastCall(fetchMock).url).pathname).toBe("/v1/crm/contacts/c_1");
+    expect(got.lifecycle_stage?.label).toBe("Lead");
+    expect(got.properties[0]?.value).toBe("CTO");
+
+    await client.refreshContactRecord("c_1");
+    expect(lastCall(fetchMock).init.method).toBe("POST");
+    expect(new URL(lastCall(fetchMock).url).pathname).toBe("/v1/crm/contacts/c_1/refresh");
+
+    const linked = await client.linkContactRecord("c_1", { idempotencyKey: "link-1" });
+    expect(lastCall(fetchMock).init.method).toBe("POST");
+    expect(new URL(lastCall(fetchMock).url).pathname).toBe("/v1/crm/contacts/c_1/link");
+    expect((lastCall(fetchMock).init.headers as Record<string, string>)["Idempotency-Key"]).toBe(
+      "link-1",
+    );
+    expect(linked.linked).toBe(true);
+  });
+
+  it("updateContactRecord PATCHes the sales fields", async () => {
+    const { client, fetchMock } = crm({ ...view, lifecycle_stage: { value: "sql", label: "SQL" } });
+    const out = await client.updateContactRecord("c_1", { lifecycle_stage: "sql" });
+    expect(lastCall(fetchMock).init.method).toBe("PATCH");
+    expect(new URL(lastCall(fetchMock).url).pathname).toBe("/v1/crm/contacts/c_1");
+    expect(body(fetchMock)).toEqual({ lifecycle_stage: "sql" });
+    expect(out.lifecycle_stage?.value).toBe("sql");
+  });
+
+  it("listLists returns a Page and passes q and limit", async () => {
+    const { client, fetchMock } = crm({
+      data: [{ external_id: "42", name: "Webinar", size: 120, dynamic: false }],
+      pagination: { next_cursor: null, has_more: false },
+    });
+    const page = await client.listLists({ q: "web", limit: 10 });
+    const url = new URL(lastCall(fetchMock).url);
+    expect(lastCall(fetchMock).init.method).toBe("GET");
+    expect(url.pathname).toBe("/v1/crm/lists");
+    expect(url.searchParams.get("q")).toBe("web");
+    expect(url.searchParams.get("limit")).toBe("10");
+    expect((await page.toArray())[0]?.size).toBe(120);
+  });
+
+  it("previewListImport and importList POST the list id", async () => {
+    const preview = {
+      list_name: "Webinar",
+      total: 120,
+      included: 100,
+      skipped: [{ reason: "opted_out", label: "Opted out", count: 20 }],
+      sample: [{ email: "ana@example.com", first_name: "Ana", last_name: "D", company: "Acme" }],
+      truncated: false,
+    };
+    const { client, fetchMock } = crm(preview);
+    const out = await client.previewListImport({ list_id: "42", apply_guards: true });
+    expect(lastCall(fetchMock).init.method).toBe("POST");
+    expect(lastCall(fetchMock).url).toContain("/crm/lists/preview");
+    expect(body(fetchMock)).toEqual({ list_id: "42", apply_guards: true });
+    expect(out.skipped[0]?.count).toBe(20);
+
+    const created = crm({ import_id: "imp_1", preview }, { status: 201 });
+    const result = await created.client.importList(
+      { list_id: "42" },
+      { idempotencyKey: "crm-list-42" },
+    );
+    const call = lastCall(created.fetchMock);
+    expect(call.init.method).toBe("POST");
+    expect(call.url).toContain("/crm/lists/import");
+    expect((call.init.headers as Record<string, string>)["Idempotency-Key"]).toBe("crm-list-42");
+    expect(result.import_id).toBe("imp_1");
+  });
+
+  it("decodes provider refs on deals and stage metadata", async () => {
+    const { client } = crm({
+      id: "dl_1",
+      name: "Acme rollout",
+      stage: { id: "st_1", name: "Won", closed: true, won: true, probability: 1 },
+      external: {
+        provider: "hubspot",
+        external_id: "9001",
+        url: "https://app.hubspot.com/deal/9001",
+        synced_at: "2026-10-08T09:00:00Z",
+        owner_name: "Bo Ray",
+      },
+    });
+    const deal = await client.getDeal("dl_1");
+    expect(deal.external?.provider).toBe("hubspot");
+    expect(deal.stage?.won).toBe(true);
+  });
+});

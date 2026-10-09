@@ -516,7 +516,8 @@ export class Unibox extends APIResource {
 
   /**
    * Marks messages as read or unread, org-wide: an explicit batch of up to 500 ids, or
-   * a whole canonical folder. Send one of `email_ids` or `folder`.
+   * a whole canonical folder. Send one of `email_ids` or `folder`. A key limited to some
+   * mailboxes cannot mark a whole folder (403); name the messages or threads instead.
    * @example
    * await warmbly.unibox.markSeen({ email_ids: ["ub_1"], seen: true });
    * await warmbly.unibox.markSeen({ folder: "inbox", seen: true });

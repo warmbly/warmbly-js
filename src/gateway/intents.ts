@@ -53,6 +53,8 @@ export const GatewayIntents = {
   IMPORT: "IMPORT",
   /** Billing and AI-credit events (`BILLING_CREDITS_LOW`, `BILLING_CREDITS_CHANGED`). */
   BILLING: "BILLING",
+  /** Connected CRM sync events (`CRM_SYNCED`). */
+  CRM: "CRM",
 } as const;
 
 /** A known intent family name. */

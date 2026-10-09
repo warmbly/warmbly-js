@@ -258,6 +258,69 @@ describe("Gateway events", () => {
     expect(gw.latestSeq).toBe(17);
   });
 
+  it("dispatches CRM_SYNCED with its objects and contact id", async () => {
+    const gw = new Gateway({ orgId: "org_1", token: "t", webSocket: FakeCtor });
+    const socket = await connectReady(gw);
+    const got: unknown[] = [];
+    gw.on("CRM_SYNCED", (e) => {
+      got.push([e.org_id, e.objects, e.contact_id]);
+    });
+    socket.message([
+      null,
+      null,
+      "org:org_1",
+      "CRM_SYNCED",
+      {
+        event_type: "CRM_SYNCED",
+        timestamp: "2026-10-08T09:00:00Z",
+        seq: 11,
+        org_id: "org_1",
+        objects: ["contact", "deal", "task", "note"],
+        contact_id: "c_1",
+      },
+    ]);
+    socket.message([
+      null,
+      null,
+      "org:org_1",
+      "CRM_SYNCED",
+      {
+        event_type: "CRM_SYNCED",
+        timestamp: "t",
+        seq: 12,
+        org_id: "org_1",
+        objects: ["pipeline", "something_new"],
+      },
+    ]);
+    expect(got).toEqual([
+      ["org_1", ["contact", "deal", "task", "note"], "c_1"],
+      ["org_1", ["pipeline", "something_new"], undefined],
+    ]);
+    expect(gw.latestSeq).toBe(12);
+  });
+
+  it("passes a SESSIONS_REVOKED control event through untyped without throwing", async () => {
+    // The server consumes SESSIONS_REVOKED itself (it closes the user's sockets) and never
+    // forwards it, but a frame carrying it must still be harmless.
+    const gw = new Gateway({ orgId: "org_1", token: "t", webSocket: FakeCtor });
+    const socket = await connectReady(gw);
+    const any = vi.fn();
+    gw.onAny(any);
+    expect(() =>
+      socket.message([
+        null,
+        null,
+        "org:org_1",
+        "SESSIONS_REVOKED",
+        { event_type: "SESSIONS_REVOKED", user_id: "user_1", timestamp: "t", seq: 11 },
+      ]),
+    ).not.toThrow();
+    expect(any).toHaveBeenCalledWith(
+      "SESSIONS_REVOKED",
+      expect.objectContaining({ user_id: "user_1" }),
+    );
+  });
+
   it("never throws on an unknown event name", async () => {
     const gw = new Gateway({ orgId: "org_1", token: "t", webSocket: FakeCtor });
     const socket = await connectReady(gw);

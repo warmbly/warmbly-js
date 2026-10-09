@@ -23,6 +23,7 @@ describe("intents", () => {
       "DIRECT",
       "IMPORT",
       "BILLING",
+      "CRM",
     ]);
     expect(GatewayIntents.EMAIL).toBe("EMAIL");
   });
@@ -53,6 +54,12 @@ describe("intents", () => {
     expect(matchesIntents("CONTACT_IMPORT_PROGRESS", ["IMPORT"])).toBe(true);
     expect(matchesIntents("CONTACT_IMPORT_PROGRESS", ["CONTACT"])).toBe(true);
     expect(matchesIntents("PLACEMENT_TEST_UPDATED", ["ACCOUNT"])).toBe(false);
+  });
+
+  it("matches CRM_SYNCED with the CRM intent", () => {
+    expect(GatewayIntents.CRM).toBe("CRM");
+    expect(matchesIntents("CRM_SYNCED", [GatewayIntents.CRM])).toBe(true);
+    expect(matchesIntents("CRM_SYNCED", ["CONTACT"])).toBe(false);
   });
 
   it("normalizes by trimming, uppercasing, and deduping", () => {
