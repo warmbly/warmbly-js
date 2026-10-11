@@ -190,6 +190,13 @@ export type ErrorCode =
   | "salesforce_sync_off"
   | "salesforce_unreachable"
   | "tracking_domain_taken"
+  // Selected-resource member scope: a restricted member, and any key or app acting for
+  // one, reaches only the read routes that filter to their grants.
+  | "member_access_restricted"
+  | "invalid_access_resource"
+  | "invalid_access_scope"
+  | "too_many_access_grants"
+  | "owner_access_unrestricted"
   | (string & {});
 
 /** Options used to construct a {@link WarmblyAPIError}. */

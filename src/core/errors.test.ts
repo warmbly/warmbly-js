@@ -178,6 +178,20 @@ describe("WarmblyAPIError.from requestId and code", () => {
     );
   });
 
+  it("types the selected-resource scope refusals", () => {
+    const err = WarmblyAPIError.from(403, {
+      error: "Forbidden",
+      message: "Your access to this workspace is limited to selected campaigns and mailboxes.",
+      code: "member_access_restricted",
+      request_id: "req_1",
+    });
+    const code: ErrorCode | undefined = err.code;
+    expect(code).toBe("member_access_restricted");
+    expect(WarmblyAPIError.from(400, { code: "too_many_access_grants" }).code).toBe(
+      "too_many_access_grants",
+    );
+  });
+
   it("passes through the headers", () => {
     const headers = new Headers({ "x-trace": "abc" });
     const err = WarmblyAPIError.from(404, {}, headers);

@@ -17,6 +17,10 @@ export type TestParticipationMode = "legacy" | "diagnostic" | "off" | (string & 
 export interface SendRecoveryResolution {
   held_task_id: string;
   held_reason: string;
+  /** Echo of the message that cleared the hold, when the server recorded one. */
+  message_id?: string;
+  provider_msg_id?: string;
+  thread_id?: string;
   evidence_type: "authentication_repaired" | "operator_provider_confirmation" | (string & {});
   evidence_task_id?: string;
   confirmation_reference?: string;

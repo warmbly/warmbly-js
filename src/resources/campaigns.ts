@@ -333,7 +333,8 @@ export interface CampaignEstimateSender {
   id: string;
   email: string;
   provider: string;
-  /** `ready`, `ramping`, `throttled`, `health_hold`, `domain_auth`, `resting` or `no_worker`. */
+  /** `ready`, `ramping`, `throttled`, `health_hold`, `domain_auth`, `resting`, `no_worker`,
+   * `send_recovery`, `send_cooldown` or `send_authority`. */
   state: string;
   first_day_cap: number;
   steady_cap: number;
@@ -496,7 +497,7 @@ export interface PutPlacementMonitorParams {
 export interface CampaignSendLimit {
   /**
    * `campaign_daily_limit`, `campaign_ramp`, `warmup_graduation`, `workspace_risk`,
-   * `domain_auth`, `resting`, `warmup_health_hold`, `other_campaigns`, `warmup_health_pace`,
+   * `domain_auth`, `resting`, `warmup_health_hold`, `send_recovery`, `send_cooldown`, `other_campaigns`, `warmup_health_pace`,
    * `mailbox_hours`, `spacing`, `sending_window`, `not_running`, `org_daily_limit`,
    * `new_lead_cap`, `leads` or `sending_behavior`.
    */
@@ -553,7 +554,7 @@ export interface CampaignMailboxPlan {
   expected_remaining: number;
   /**
    * `sending`, `budget_spent`, `hours_closed`, `no_working_day`, `domain_auth`, `resting`,
-   * `health_hold`, `window_closed` or `no_worker`.
+   * `health_hold`, `send_recovery`, `send_cooldown`, `send_authority`, `window_closed` or `no_worker`.
    */
   state: string;
   reopens_at?: string;

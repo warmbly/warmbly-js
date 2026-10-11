@@ -16,6 +16,62 @@ export interface AnalyticsParams {
   [key: string]: unknown;
 }
 
+/** Window for {@link Analytics.dashboard}. Anything else is treated as `7d` by the server. */
+export type DashboardPeriod = "7d" | "30d" | "90d";
+
+/** Query params for {@link Analytics.dashboard}. */
+export interface DashboardParams {
+  /** The window: `7d` (default), `30d` or `90d`. The dashboard has no `from`/`to`. */
+  period?: DashboardPeriod;
+  /**
+   * Narrow the campaign sections (`overall_stats`, `daily_trend`, `top_campaigns`,
+   * `recent_activity`) to these campaigns. At most 100. An id outside the workspace is
+   * dropped, never widening the filter.
+   */
+  campaign_ids?: string | string[];
+  /** Narrow to the campaigns currently in these folders. At most 100. */
+  folder_ids?: string | string[];
+  [key: string]: unknown;
+}
+
+/** One campaign or folder named in a {@link DashboardScope}. */
+export interface DashboardScopeItem {
+  id: string;
+  name: string;
+  [key: string]: unknown;
+}
+
+/** The filter a dashboard was computed for. Absent from the response when it was not filtered. */
+export interface DashboardScope {
+  campaigns: DashboardScopeItem[];
+  folders: DashboardScopeItem[];
+  /** Distinct campaigns the named campaigns and folders cover together. */
+  campaign_count: number;
+  [key: string]: unknown;
+}
+
+/** The dashboard payload from {@link Analytics.dashboard}. Sections not typed here pass through. */
+export interface DashboardAnalytics extends AnalyticsReport {
+  /** Echo of the `campaign_ids` and `folder_ids` filter; absent when unfiltered. */
+  scope?: DashboardScope;
+}
+
+/**
+ * A cohort's replies by classification. The human classes plus `unclassified` add up to
+ * `replies`; `out_of_office` and `auto_reply` are automated answers and are not replies.
+ * Appears as `reply_breakdown` in campaign analytics.
+ */
+export interface ReplyBreakdown {
+  positive: number;
+  neutral: number;
+  negative: number;
+  unsubscribe: number;
+  unclassified: number;
+  out_of_office: number;
+  auto_reply: number;
+  [key: string]: unknown;
+}
+
 /** Analytics query params for endpoints where the platform requires an explicit window. */
 export interface RangeAnalyticsParams {
   /** Inclusive start of the window (RFC 3339 or `YYYY-MM-DD`). Required. */
@@ -316,12 +372,14 @@ export interface WarmupPlacementReport {
  */
 export class Analytics extends APIResource {
   /**
-   * Returns the top-level analytics dashboard.
+   * Returns the top-level analytics dashboard for a `7d`, `30d` or `90d` period, optionally
+   * narrowed to some campaigns or folders. A filtered response echoes it in `scope`. Needs
+   * `READ_ANALYTICS`.
    * @example
-   * const dash = await warmbly.analytics.dashboard();
+   * const dash = await warmbly.analytics.dashboard({ period: "30d", folder_ids: ["f_1"] });
    */
-  dashboard(params?: AnalyticsParams): Promise<AnalyticsReport> {
-    return this.http.get<AnalyticsReport>("analytics/dashboard", { query: params });
+  dashboard(params?: DashboardParams): Promise<DashboardAnalytics> {
+    return this.http.get<DashboardAnalytics>("analytics/dashboard", { query: params });
   }
 
   /**

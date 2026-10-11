@@ -29,6 +29,14 @@
   - OAuth apps: `setLogo`, `removeLogo`, `getListing`, `saveListing`, `deleteListing`, and `listWithAccess`, which also returns `developer_access`.
   - The `CRM_SYNCED` gateway event with a `CRM` intent, 35 more error codes (CRM, Salesforce, listing, logo and API-key ceilings), mailbox test participation fields, richer placement observation counts, and `external` references on pipelines, deals, tasks and notes.
 
+  Server sync through `176d3c24`:
+
+  - `analytics.dashboard` now sends `period` (`7d`, `30d` or `90d`), which is what the server reads. It sent `from` and `to` before, which the dashboard ignores, so the window was always 7 days. It also takes `campaign_ids` and `folder_ids` to narrow the campaign sections, and the response types the `scope` echo (`DashboardParams`, `DashboardAnalytics`, `DashboardScope`).
+  - `ReplyBreakdown` types the new `reply_breakdown` in campaign analytics; the new `positive_replies`, `interested_leads` and `positive_reply_rate` fields pass through the report.
+  - Campaign estimate and send plan document the new `send_recovery`, `send_cooldown` and `send_authority` states.
+  - `SendRecoveryResolution` gains `message_id`, `provider_msg_id` and `thread_id`.
+  - `ErrorCode` gains `member_access_restricted`, `invalid_access_resource`, `invalid_access_scope`, `too_many_access_grants` and `owner_access_unrestricted`, returned when a member restricted to selected resources, or a key or app acting for one, calls a route outside their grants.
+
 ## 0.3.0
 
 ### Minor Changes

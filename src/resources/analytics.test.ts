@@ -36,13 +36,29 @@ describe("Analytics", () => {
     expect(url).toContain("/analytics/dashboard");
   });
 
-  it("dashboard with params", async () => {
-    const { http, fetchMock } = clientWith({ visits: 10 });
-    await new Analytics(http).dashboard({ from: "2026-06-01", to: "2026-06-15" });
-    const { url } = lastCall(fetchMock);
-    expect(url).toContain("/analytics/dashboard");
-    expect(url).toContain("from=2026-06-01");
-    expect(url).toContain("to=2026-06-15");
+  it("dashboard sends period, not from/to, and repeats the campaign and folder filters", async () => {
+    const { http, fetchMock } = clientWith({
+      overall_stats: { emails_sent: 40 },
+      scope: {
+        campaigns: [{ id: "b1f2c3d4-0000-0000-0000-000000000001", name: "Client A - Dentists" }],
+        folders: [{ id: "f01d0000-0000-0000-0000-000000000004", name: "Client A" }],
+        campaign_count: 6,
+      },
+    });
+    const dash = await new Analytics(http).dashboard({
+      period: "30d",
+      campaign_ids: ["c_1", "c_2"],
+      folder_ids: "f_1",
+    });
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("GET");
+    expect(new URL(url).pathname).toMatch(/\/analytics\/dashboard$/);
+    const q = new URL(url).searchParams;
+    expect(q.get("period")).toBe("30d");
+    expect(q.getAll("campaign_ids")).toEqual(["c_1", "c_2"]);
+    expect(q.getAll("folder_ids")).toEqual(["f_1"]);
+    expect(dash.scope?.campaign_count).toBe(6);
+    expect(dash.scope?.folders[0]?.name).toBe("Client A");
   });
 
   it("deliverability without params", async () => {
