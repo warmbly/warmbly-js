@@ -3,6 +3,7 @@ import {
   AuthenticationError,
   BadRequestError,
   ConflictError,
+  type ErrorCode,
   GatewayError,
   InternalServerError,
   NotFoundError,
@@ -158,6 +159,37 @@ describe("WarmblyAPIError.from requestId and code", () => {
   it("passes through the code from the body", () => {
     const err = WarmblyAPIError.from(429, { code: "rate_limit_exceeded" });
     expect(err.code).toBe("rate_limit_exceeded");
+  });
+
+  it("maps the CRM and Salesforce refusal codes onto the typed statuses", () => {
+    const managed = WarmblyAPIError.from(409, {
+      error: "Conflict",
+      message: "Pipelines are managed in HubSpot.",
+      code: "crm_managed_externally",
+    });
+    expect(managed).toBeInstanceOf(ConflictError);
+    const code: ErrorCode | undefined = managed.code;
+    expect(code).toBe("crm_managed_externally");
+    const limited = WarmblyAPIError.from(429, { code: "salesforce_rate_limited" });
+    expect(limited).toBeInstanceOf(RateLimitError);
+    expect(limited.code).toBe("salesforce_rate_limited");
+    expect(WarmblyAPIError.from(403, { code: "oauth_token_not_allowed" }).code).toBe(
+      "oauth_token_not_allowed",
+    );
+  });
+
+  it("types the selected-resource scope refusals", () => {
+    const err = WarmblyAPIError.from(403, {
+      error: "Forbidden",
+      message: "Your access to this workspace is limited to selected campaigns and mailboxes.",
+      code: "member_access_restricted",
+      request_id: "req_1",
+    });
+    const code: ErrorCode | undefined = err.code;
+    expect(code).toBe("member_access_restricted");
+    expect(WarmblyAPIError.from(400, { code: "too_many_access_grants" }).code).toBe(
+      "too_many_access_grants",
+    );
   });
 
   it("passes through the headers", () => {

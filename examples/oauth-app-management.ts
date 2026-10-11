@@ -80,6 +80,20 @@ for (const endpoint of endpoints) {
   );
 }
 
+// 7b. Give the app a logo and publish it to the community directory.
+const logo = new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], { type: "image/png" });
+const withLogo = await warmbly.oauthApplications.setLogo(appId, logo, { filename: "logo.png" });
+console.log("Logo:", withLogo.logo_url);
+const listing = await warmbly.oauthApplications.saveListing(appId, {
+  slug: "acme-dashboard-sync",
+  tagline: "Read-only Acme dashboard sync",
+  category: "data",
+  install_url: "https://acme.example.com/install",
+});
+console.log("Listed at:", listing.slug, listing.status);
+const { developer_access } = await warmbly.oauthApplications.listWithAccess();
+if (developer_access.blocked) console.log("Publishing blocked:", developer_access.reason);
+
 // 8. Walk the application's webhook deliveries. This returns a Page, so it is async-iterable
 // and fetches further pages on demand. Here we filter to failed deliveries.
 const deliveries = await warmbly.oauthApplications.listWebhookDeliveries(appId, {

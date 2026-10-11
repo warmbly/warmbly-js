@@ -21,6 +21,7 @@ import {
   Campaigns,
   Contacts,
   Crm,
+  EmailImages,
   Emails,
   Forms,
   Generation,
@@ -28,6 +29,7 @@ import {
   LeadSync,
   Meetings,
   Misc,
+  Placement,
   Segments,
   Suppressions,
   Templates,
@@ -90,6 +92,8 @@ export class Warmbly {
   readonly unibox: Unibox;
   /** Dashboard, deliverability, warmup, and per-campaign analytics. */
   readonly analytics: Analytics;
+  /** Inbox placement tests and fleet-wide batches against seed mailboxes. */
+  readonly placement: Placement;
   /** Continuous recommendations about the workspace's sending posture. */
   readonly advisor: Advisor;
   /** AI writing: compose, rewrite a selection, and preview AI variables. */
@@ -98,8 +102,10 @@ export class Warmbly {
   readonly aiSkills: AISkills;
   /** The AI tool registry over plain HTTP, for function-calling agents without MCP. */
   readonly agentTools: AgentTools;
-  /** Reply templates: render, score, duplicate, and reorder. */
+  /** Reply templates: render, score, analyze, duplicate, and reorder. */
   readonly templates: Templates;
+  /** The workspace image library for email bodies: upload, list, and delete. */
+  readonly emailImages: EmailImages;
   /** CRM pipelines, deals, task types, and tasks. */
   readonly crm: Crm;
   /** Booked calls from Calendly and Cal.com, plus meetings you log by hand. */
@@ -130,11 +136,13 @@ export class Warmbly {
     this.emails = new Emails(this.http);
     this.unibox = new Unibox(this.http);
     this.analytics = new Analytics(this.http);
+    this.placement = new Placement(this.http);
     this.advisor = new Advisor(this.http);
     this.generation = new Generation(this.http);
     this.aiSkills = new AISkills(this.http);
     this.agentTools = new AgentTools(this.http);
     this.templates = new Templates(this.http);
+    this.emailImages = new EmailImages(this.http);
     this.crm = new Crm(this.http);
     this.meetings = new Meetings(this.http);
     this.integrations = new Integrations(this.http);

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import type { HttpClient } from "../core/http";
+import { resolveClientOptions } from "../core/config";
+import { HttpClient } from "../core/http";
 import { OAuthApplications } from "./applications";
 
 /** Builds a stub HttpClient exposing only the methods OAuthApplications uses. */
@@ -244,5 +245,147 @@ describe("OAuthApplications.uploadLogo", () => {
     expect(path).toBe("/oauth/application-logo");
     expect(opts.body).toBeInstanceOf(FormData);
     expect(opts.body.get("file")).toBeInstanceOf(Blob);
+  });
+});
+
+describe("OAuthApplications logo, listing and developer access", () => {
+  // These use a real HttpClient over a mocked fetch, so method, path and body are asserted
+  // as they go on the wire.
+  function realClient(responses: Array<{ body: unknown; status?: number }>) {
+    let i = 0;
+    const fetchMock = vi.fn(async () => {
+      const next = responses[Math.min(i, responses.length - 1)];
+      i += 1;
+      const status = next?.status ?? 200;
+      return new Response(status === 204 ? null : JSON.stringify(next?.body), {
+        status,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    const http = new HttpClient(
+      resolveClientOptions({ apiKey: "wmbly_test", fetch: fetchMock as unknown as typeof fetch }),
+    );
+    return { apps: new OAuthApplications(http), fetchMock };
+  }
+
+  function call(fetchMock: ReturnType<typeof vi.fn>, index = 0) {
+    const c = fetchMock.mock.calls[index];
+    return { url: new URL(String(c?.[0])), init: (c?.[1] ?? {}) as RequestInit };
+  }
+
+  const app = {
+    id: "app_1",
+    organization_id: "org_1",
+    created_by: "user_1",
+    client_id: "wmcid_abc",
+    name: "Acme Sync",
+    logo_url: "https://cdn.warmbly.com/oauth-app-logos/app_1-1.png",
+    redirect_uris: ["https://acme.example.com/cb"],
+    scopes: 6,
+    status: "active",
+    is_public: false,
+    dynamically_registered: false,
+    suspended_at: "2026-10-01T00:00:00Z",
+    suspended_reason: "Phishing reports",
+    created_at: "2026-09-01T00:00:00Z",
+    updated_at: "2026-10-01T00:00:00Z",
+  };
+
+  const listing = {
+    application_id: "app_1",
+    organization_id: "org_1",
+    slug: "acme-sync",
+    tagline: "Two-way sync with Acme",
+    description: "",
+    category: "crm",
+    install_url: "https://acme.example.com/install",
+    support_url: "",
+    privacy_url: "",
+    status: "published",
+    submitted_at: "2026-09-02T00:00:00Z",
+    created_at: "2026-09-02T00:00:00Z",
+    updated_at: "2026-09-02T00:00:00Z",
+  };
+
+  it("listWithAccess returns the apps and developer_access", async () => {
+    const { apps, fetchMock } = realClient([
+      {
+        body: {
+          applications: [app],
+          developer_access: { blocked: true, reason: "Under review" },
+        },
+      },
+    ]);
+    const out = await apps.listWithAccess();
+    expect(call(fetchMock).init.method).toBe("GET");
+    expect(call(fetchMock).url.pathname).toBe("/v1/oauth/applications");
+    expect(out.applications[0]?.suspended_reason).toBe("Phishing reports");
+    expect(out.developer_access).toEqual({ blocked: true, reason: "Under review" });
+  });
+
+  it("listWithAccess defaults developer_access when the server omits it", async () => {
+    const { apps } = realClient([{ body: { applications: [] } }]);
+    expect((await apps.listWithAccess()).developer_access).toEqual({ blocked: false });
+  });
+
+  it("setLogo POSTs multipart to the app's logo route and decodes the app", async () => {
+    const { apps, fetchMock } = realClient([{ body: app }]);
+    const out = await apps.setLogo("app_1", new Blob(["png"], { type: "image/png" }), {
+      filename: "logo.png",
+    });
+    const { url, init } = call(fetchMock);
+    expect(init.method).toBe("POST");
+    expect(url.pathname).toBe("/v1/oauth/applications/app_1/logo");
+    expect(init.body).toBeInstanceOf(FormData);
+    const part = (init.body as FormData).get("file");
+    expect(part).toBeInstanceOf(Blob);
+    expect((part as File).name).toBe("logo.png");
+    // The runtime sets the multipart boundary; the SDK must not force a content type.
+    expect(
+      Object.keys((init.headers ?? {}) as Record<string, string>).some(
+        (h) => h.toLowerCase() === "content-type",
+      ),
+    ).toBe(false);
+    expect(out.logo_url).toContain("oauth-app-logos");
+  });
+
+  it("removeLogo DELETEs the logo and decodes the updated app", async () => {
+    const { apps, fetchMock } = realClient([{ body: { ...app, logo_url: "" } }]);
+    const out = await apps.removeLogo("app_1");
+    expect(call(fetchMock).init.method).toBe("DELETE");
+    expect(call(fetchMock).url.pathname).toBe("/v1/oauth/applications/app_1/logo");
+    expect(out.logo_url).toBe("");
+  });
+
+  it("getListing unwraps the listing, and null when unpublished", async () => {
+    const { apps, fetchMock } = realClient([{ body: { listing } }, { body: { listing: null } }]);
+    const got = await apps.getListing("app_1");
+    expect(call(fetchMock).init.method).toBe("GET");
+    expect(call(fetchMock).url.pathname).toBe("/v1/oauth/applications/app_1/listing");
+    expect(got?.slug).toBe("acme-sync");
+    expect(await apps.getListing("app_1")).toBeNull();
+  });
+
+  it("saveListing PUTs the listing and unwraps it", async () => {
+    const { apps, fetchMock } = realClient([{ body: { listing } }]);
+    const body = {
+      slug: "acme-sync",
+      tagline: "Two-way sync with Acme",
+      category: "crm",
+      install_url: "https://acme.example.com/install",
+    };
+    const out = await apps.saveListing("app_1", body);
+    const { url, init } = call(fetchMock);
+    expect(init.method).toBe("PUT");
+    expect(url.pathname).toBe("/v1/oauth/applications/app_1/listing");
+    expect(JSON.parse(String(init.body))).toEqual(body);
+    expect(out.status).toBe("published");
+  });
+
+  it("deleteListing DELETEs the listing", async () => {
+    const { apps, fetchMock } = realClient([{ body: { deleted: true } }]);
+    expect(await apps.deleteListing("app_1")).toEqual({ deleted: true });
+    expect(call(fetchMock).init.method).toBe("DELETE");
+    expect(call(fetchMock).url.pathname).toBe("/v1/oauth/applications/app_1/listing");
   });
 });

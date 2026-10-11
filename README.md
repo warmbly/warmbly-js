@@ -90,21 +90,24 @@ Resources hang off the client and mirror the API surface:
 | --- | --- |
 | `warmbly.apiKeys` | API keys, usage analytics, permission catalog |
 | `warmbly.campaigns` | Campaigns, sequence steps, A/B variants, attachments, lifecycle |
-| `warmbly.contacts` | Contacts, search, import/export, verification, notes, timeline, campaign state |
+| `warmbly.contacts` | Contacts, search, import/export, verification, notes, timeline, campaign state, the Salesforce panel |
 | `warmbly.segments` | Saved contact audiences: conditions, manual overrides, campaign enrolment |
 | `warmbly.forms` | Hosted lead-capture forms, submissions, statistics, custom domain |
 | `warmbly.suppressions` | The workspace suppression list |
 | `warmbly.emails` | Email accounts (mailboxes), warmup, tracking domain, hold/release, sending behaviour, sending |
-| `warmbly.unibox` | Unified inbox: threads, replies, compose, drafts, labels, snoozes |
-| `warmbly.analytics` | Dashboard, deliverability, warmup, and campaign analytics |
+| `warmbly.unibox` | Unified inbox: threads, replies, compose, drafts, labels, snoozes, folder moves |
+| `warmbly.placement` | Inbox placement tests and batches, seed mailboxes, coverage |
+| `warmbly.emailImages` | Images uploaded for use in email bodies |
+| `warmbly.analytics` | Dashboard, deliverability, warmup, direct-mail, inbox-tagging, warmup placement and campaign analytics |
 | `warmbly.advisor` | Recommendations about your sending posture, and the fixes for them |
 | `warmbly.generation` | AI writing: compose, rewrite a selection, preview AI variables |
 | `warmbly.aiSkills` | Organization playbooks every AI surface follows |
 | `warmbly.agentTools` | The AI tool registry over HTTP, for function-calling agents without MCP |
 | `warmbly.templates` | Reply templates: render, score, duplicate |
-| `warmbly.crm` | Pipelines, deals, task types, tasks |
+| `warmbly.crm` | Pipelines, deals, task types, tasks, and CRM mode: settings, owners, sync health, contact records and list imports for HubSpot or Pipedrive |
 | `warmbly.meetings` | Booked calls from Calendly and Cal.com, plus manual entries |
-| `warmbly.integrations` | Third-party connections, events, field mappings |
+| `warmbly.integrations` | Third-party connections, events, field mappings, the community app directory |
+| `warmbly.integrations.salesforce` | Native Salesforce sync: health, settings, metadata, list view and Campaign imports, activity log |
 | `warmbly.automations` | The visual flow builder: trigger events plus action steps |
 | `warmbly.leadSync` | On-demand Google Sheets to contacts sync |
 | `warmbly.webhooks` | Webhook endpoints, deliveries, event types |
@@ -140,6 +143,75 @@ await warmbly.forms.update(form.id, { status: "published", campaign_id: "camp_1"
 const { url } = await warmbly.forms.mintLink(form.id, "c_1"); // personalized link
 ```
 
+### Imports, bulk actions and placement
+
+Large contact files import in the background: create the import, analyze the columns, then
+start it. Rows that fail are downloadable as CSV. Bulk calls take either ids or a selection
+(`{ all: true, filters, exclude }`), and `contacts.add` takes a bare array of contacts.
+
+```ts
+const imp = await warmbly.contacts.createImport(file, { filename: "leads.csv" });
+const analysis = await warmbly.contacts.analyzeImport(imp.id, {
+  mapping: imp.preview?.suggested_mapping ?? [],
+  has_header: true,
+});
+await warmbly.contacts.startImport(imp.id, {
+  mapping: imp.preview?.suggested_mapping ?? [],
+  has_header: true,
+});
+const failures = await warmbly.contacts.importFailures(imp.id); // CSV text
+```
+
+Inbox placement tests send a copy of a message through seed mailboxes and report where each
+landed. Preview a batch to see the cost, then create it:
+
+```ts
+const preview = await warmbly.placement.previewBatch({ campaign_id: "camp_1" });
+const batch = await warmbly.placement.createBatch({ campaign_id: "camp_1" });
+const detail = await warmbly.placement.getBatch(batch.id);
+```
+
+Campaigns also expose `sendPlan`, per-lead `pauseLead`, `resumeLead`, `getLeadHold`,
+`getLeadCC` and `setLeadCC`, and `getPlacementMonitor`/`putPlacementMonitor`. Note that a
+binary `xlsx` contact export is not supported by the text-decoding REST client; use `csv`
+or `json`.
+
+### CRM sync: HubSpot, Pipedrive and Salesforce
+
+A workspace can run its CRM on HubSpot or Pipedrive. `warmbly.crm` then reads and writes the
+mirrored deals and tasks, and adds the sync itself: settings, owner matching, health, a
+contact's provider record, and list imports. Salesforce has its own native sync per
+connection under `warmbly.integrations.salesforce`.
+
+```ts
+// HubSpot or Pipedrive as the CRM.
+const { provider, account } = await warmbly.crm.getSettings();
+const health = await warmbly.crm.syncHealth();
+if (health.failed > 0) await warmbly.crm.retrySyncFailures();
+const record = await warmbly.crm.getContactRecord("c_1");
+console.log(provider, account?.name, record.lifecycle_stage?.label);
+
+// Salesforce: health, then import a list view and follow the activity log.
+const sf = warmbly.integrations.salesforce;
+const overview = await sf.overview("conn_1", { checks: true });
+console.log(overview.health, overview.api.used, "/", overview.api.max);
+const [view] = await sf.listViews("conn_1", "Lead");
+if (view) {
+  await sf.createImportSource(
+    "conn_1",
+    { source_kind: "list_view", object: "Lead", source_id: view.id, recurring: true },
+    { idempotencyKey: "sf-import-my-leads" },
+  );
+}
+for await (const row of await sf.listActivity("conn_1", { status: "failed" })) {
+  console.log(row.kind, row.contact_email, row.detail);
+}
+const panel = await warmbly.contacts.salesforce("c_1"); // linked Leads/Contacts, opportunities
+```
+
+Changes in a connected CRM arrive on the gateway as `CRM_SYNCED` (intent `CRM`), naming the
+`objects` to refetch.
+
 ### Agent tools
 
 Function-calling agents that do not speak MCP get the same permission-filtered tool
@@ -159,7 +231,13 @@ token usage rather than a flat label. Drafting never sends — you decide what t
 ```ts
 // Draft a reply grounded in the thread, the contact, and your voice profile.
 const draft = await warmbly.unibox.replyDraft({ thread_id: "t_1" });
-if (draft.text) await warmbly.unibox.reply({ thread_id: "t_1", body: draft.text });
+if (draft.text) await warmbly.unibox.reply({
+    email_account_id: "mb_1",
+    to: ["jordan@acme.com"],
+    subject: "Re: Quick question",
+    thread_id: "t_1",
+    body_plain: draft.text,
+  });
 console.log(draft.credits_charged, draft.model);
 
 // Compose drafting may ask a clarifying question instead of inventing a pitch.
@@ -293,7 +371,19 @@ const app = await warmbly.oauthApplications.create({
   scopes: Permissions.from("READ_CAMPAIGNS", "READ_CONTACTS").value,
 });
 console.log(app.client_id, app.client_secret); // secret shown once
+
+// Give it a logo, then publish it to the community directory.
+await warmbly.oauthApplications.setLogo(app.id, logoBlob, { filename: "logo.png" });
+await warmbly.oauthApplications.saveListing(app.id, {
+  slug: "my-app",
+  tagline: "Sync replies into My App",
+  category: "crm",
+  install_url: "https://yourapp.com/install",
+});
 ```
+
+These routes refuse an OAuth app token (`oauth_token_not_allowed`): use an API key or the
+dashboard.
 
 ## Realtime gateway
 
@@ -312,6 +402,9 @@ gw.on("AI_DRAFT_READY", (e) => console.log("draft awaiting review", e.draft_id))
 gw.on("BILLING_CREDITS_LOW", (e) => console.log("credits low", e.balance, e.threshold));
 gw.on("CAMPAIGN_IDLE", (e) => console.log("waiting for leads", e.campaign_id));
 gw.on("FORM_SUBMISSION_CREATED", (e) => console.log("form submitted", e.form_id));
+gw.on("PLACEMENT_TEST_UPDATED", (e) => console.log("placement", e.test_id, e.status));
+gw.on("CONTACT_IMPORT_PROGRESS", (e) => console.log("import", e.import_id, e.status));
+gw.on("CRM_SYNCED", (e) => console.log("crm changed", e.objects, e.contact_id));
 
 // Lifecycle
 gw.on("hello", (h) => console.log("connected at seq", h.seq));
@@ -323,7 +416,7 @@ await gw.connect();
 gw.close();
 ```
 
-**Intents** are event families (`EMAIL`, `CAMPAIGN`, `AUDIT`, `CUSTOM`, `AI`, `BILLING`, `FORM`, `PAGE`, and more) that narrow the stream so you only receive and pay the rate budget for what you act on. **Channels** beyond the org stream are joinable too: `gw.joinCampaign(id)`, `gw.joinAccount(id)`, `gw.joinBulk(id)`.
+**Intents** are event families (`EMAIL`, `CAMPAIGN`, `AUDIT`, `CUSTOM`, `AI`, `BILLING`, `FORM`, `PAGE`, `WARMUP`, `PLACEMENT`, `DIRECT`, `IMPORT`, `CRM`, and more). Intents match by substring of the event type, so `EMAIL` also receives `DIRECT_EMAIL_*` that narrow the stream so you only receive and pay the rate budget for what you act on. **Channels** beyond the org stream are joinable too: `gw.joinCampaign(id)`, `gw.joinAccount(id)`, `gw.joinBulk(id)`.
 
 Joins have their own per-minute budget. When the server refuses one as `rate_limited`, the
 client emits `rateLimited` (with the `topic` and `retry_after_ms`), keeps the socket open, and

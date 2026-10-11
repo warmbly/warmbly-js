@@ -18,7 +18,12 @@ describe("intents", () => {
       "CUSTOM",
       "AI",
       "RESEARCH",
+      "WARMUP",
+      "PLACEMENT",
+      "DIRECT",
+      "IMPORT",
       "BILLING",
+      "CRM",
     ]);
     expect(GatewayIntents.EMAIL).toBe("EMAIL");
   });
@@ -36,6 +41,25 @@ describe("intents", () => {
     expect(matchesIntents("ACCOUNT_SYNC_STATE", ["ACCOUNT"])).toBe(true);
     expect(matchesIntents("CAMPAIGN_IDLE", ["CAMPAIGN"])).toBe(true);
     expect(matchesIntents("PAGE_HIT", ["FORM"])).toBe(false);
+  });
+
+  it("matches the placement, direct-mail, warmup and import events with their intents", () => {
+    expect(matchesIntents("PLACEMENT_TEST_UPDATED", ["PLACEMENT"])).toBe(true);
+    expect(matchesIntents("WARMUP_PLACEMENT", ["WARMUP"])).toBe(true);
+    // The server's intent filter is a substring match, so PLACEMENT also catches this one.
+    expect(matchesIntents("WARMUP_PLACEMENT", ["PLACEMENT"])).toBe(true);
+    expect(matchesIntents("DIRECT_EMAIL_OPENED", ["DIRECT"])).toBe(true);
+    expect(matchesIntents("DIRECT_EMAIL_CLICKED", ["EMAIL"])).toBe(true);
+    expect(matchesIntents("MAILBOX_IMPORT_PROGRESS", ["IMPORT"])).toBe(true);
+    expect(matchesIntents("CONTACT_IMPORT_PROGRESS", ["IMPORT"])).toBe(true);
+    expect(matchesIntents("CONTACT_IMPORT_PROGRESS", ["CONTACT"])).toBe(true);
+    expect(matchesIntents("PLACEMENT_TEST_UPDATED", ["ACCOUNT"])).toBe(false);
+  });
+
+  it("matches CRM_SYNCED with the CRM intent", () => {
+    expect(GatewayIntents.CRM).toBe("CRM");
+    expect(matchesIntents("CRM_SYNCED", [GatewayIntents.CRM])).toBe(true);
+    expect(matchesIntents("CRM_SYNCED", ["CONTACT"])).toBe(false);
   });
 
   it("normalizes by trimming, uppercasing, and deduping", () => {

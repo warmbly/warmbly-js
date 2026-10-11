@@ -204,6 +204,140 @@ describe("Gateway events", () => {
     );
   });
 
+  it("dispatches the placement, direct-mail, import and warmup events with typed payloads", async () => {
+    const gw = new Gateway({ orgId: "org_1", token: "t", webSocket: FakeCtor });
+    const socket = await connectReady(gw);
+    const got: Record<string, unknown> = {};
+    gw.on("PLACEMENT_TEST_UPDATED", (e) => {
+      got.placement = [e.test_id, e.batch_id, e.campaign_id, e.status];
+    });
+    gw.on("WARMUP_PLACEMENT", (e) => {
+      got.warmup = [e.email_account_id, e.status];
+    });
+    gw.on("DIRECT_EMAIL_OPENED", (e) => {
+      got.opened = [e.email_account_id, e.machine, e.campaign_id];
+    });
+    gw.on("DIRECT_EMAIL_CLICKED", (e) => {
+      got.clicked = [e.email_account_id, e.org_id];
+    });
+    gw.on("MAILBOX_IMPORT_PROGRESS", (e) => {
+      got.mailboxImport = [e.import_id, e.status];
+    });
+    gw.on("CONTACT_IMPORT_PROGRESS", (e) => {
+      got.contactImport = [e.import_id, e.status];
+    });
+    const send = (name: string, seq: number, body: Record<string, unknown>) =>
+      socket.message([
+        null,
+        null,
+        "org:org_1",
+        name,
+        { event_type: name, timestamp: "t", seq, ...body },
+      ]);
+    send("PLACEMENT_TEST_UPDATED", 11, {
+      org_id: "o",
+      test_id: "t1",
+      campaign_id: "c1",
+      status: "running",
+    });
+    send("PLACEMENT_TEST_UPDATED", 12, { org_id: "o", batch_id: "b1", status: "brand_new_status" });
+    send("WARMUP_PLACEMENT", 13, { email_account_id: "mb1", status: "spam" });
+    send("DIRECT_EMAIL_OPENED", 14, { email_account_id: "mb1", machine: true });
+    send("DIRECT_EMAIL_CLICKED", 15, { email_account_id: "mb1", org_id: "o" });
+    send("MAILBOX_IMPORT_PROGRESS", 16, { import_id: "i1", status: "completed" });
+    send("CONTACT_IMPORT_PROGRESS", 17, { import_id: "i2", status: "queued" });
+    expect(got).toEqual({
+      // The last PLACEMENT_TEST_UPDATED is the batch-level one with an unknown status.
+      placement: [undefined, "b1", undefined, "brand_new_status"],
+      warmup: ["mb1", "spam"],
+      opened: ["mb1", true, undefined],
+      clicked: ["mb1", "o"],
+      mailboxImport: ["i1", "completed"],
+      contactImport: ["i2", "queued"],
+    });
+    expect(gw.latestSeq).toBe(17);
+  });
+
+  it("dispatches CRM_SYNCED with its objects and contact id", async () => {
+    const gw = new Gateway({ orgId: "org_1", token: "t", webSocket: FakeCtor });
+    const socket = await connectReady(gw);
+    const got: unknown[] = [];
+    gw.on("CRM_SYNCED", (e) => {
+      got.push([e.org_id, e.objects, e.contact_id]);
+    });
+    socket.message([
+      null,
+      null,
+      "org:org_1",
+      "CRM_SYNCED",
+      {
+        event_type: "CRM_SYNCED",
+        timestamp: "2026-10-08T09:00:00Z",
+        seq: 11,
+        org_id: "org_1",
+        objects: ["contact", "deal", "task", "note"],
+        contact_id: "c_1",
+      },
+    ]);
+    socket.message([
+      null,
+      null,
+      "org:org_1",
+      "CRM_SYNCED",
+      {
+        event_type: "CRM_SYNCED",
+        timestamp: "t",
+        seq: 12,
+        org_id: "org_1",
+        objects: ["pipeline", "something_new"],
+      },
+    ]);
+    expect(got).toEqual([
+      ["org_1", ["contact", "deal", "task", "note"], "c_1"],
+      ["org_1", ["pipeline", "something_new"], undefined],
+    ]);
+    expect(gw.latestSeq).toBe(12);
+  });
+
+  it("passes a SESSIONS_REVOKED control event through untyped without throwing", async () => {
+    // The server consumes SESSIONS_REVOKED itself (it closes the user's sockets) and never
+    // forwards it, but a frame carrying it must still be harmless.
+    const gw = new Gateway({ orgId: "org_1", token: "t", webSocket: FakeCtor });
+    const socket = await connectReady(gw);
+    const any = vi.fn();
+    gw.onAny(any);
+    expect(() =>
+      socket.message([
+        null,
+        null,
+        "org:org_1",
+        "SESSIONS_REVOKED",
+        { event_type: "SESSIONS_REVOKED", user_id: "user_1", timestamp: "t", seq: 11 },
+      ]),
+    ).not.toThrow();
+    expect(any).toHaveBeenCalledWith(
+      "SESSIONS_REVOKED",
+      expect.objectContaining({ user_id: "user_1" }),
+    );
+  });
+
+  it("never throws on an unknown event name", async () => {
+    const gw = new Gateway({ orgId: "org_1", token: "t", webSocket: FakeCtor });
+    const socket = await connectReady(gw);
+    const any = vi.fn();
+    gw.onAny(any);
+    expect(() =>
+      socket.message([
+        null,
+        null,
+        "org:org_1",
+        "SOMETHING_NEW_UPDATED",
+        { event_type: "SOMETHING_NEW_UPDATED", timestamp: "t", seq: 11 },
+      ]),
+    ).not.toThrow();
+    expect(any).toHaveBeenCalled();
+  });
+
   it("emits presence on presence_state and presence_diff", async () => {
     const gw = new Gateway({ orgId: "org_1", token: "t", webSocket: FakeCtor });
     const socket = await connectReady(gw);
