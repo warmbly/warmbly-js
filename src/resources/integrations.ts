@@ -1,7 +1,9 @@
 import type { HttpClient } from "../core/http";
 import type { Page } from "../core/pagination";
 import type { RequestOptions } from "../core/types";
+import { Apollo } from "./apollo";
 import { APIResource } from "./base";
+import { Clay } from "./clay";
 import { Salesforce } from "./salesforce";
 
 /** An available integration in the catalog. Documented-but-open shape. */
@@ -163,10 +165,26 @@ export class Integrations extends APIResource {
    * const o = await warmbly.integrations.salesforce.overview("conn_1");
    */
   readonly salesforce: Salesforce;
+  /**
+   * The Apollo connection: API key, lists, imports and enrichment runs. See {@link Apollo}.
+   *
+   * @example
+   * const lists = await warmbly.integrations.apollo.lists("conn_1");
+   */
+  readonly apollo: Apollo;
+  /**
+   * The Clay connection settings. See {@link Clay}.
+   *
+   * @example
+   * const s = await warmbly.integrations.clay.settings("conn_1");
+   */
+  readonly clay: Clay;
 
   constructor(http: HttpClient) {
     super(http);
     this.salesforce = new Salesforce(http);
+    this.apollo = new Apollo(http);
+    this.clay = new Clay(http);
   }
 
   /**

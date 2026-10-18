@@ -28,6 +28,8 @@
   - `contacts.salesforce`, `syncSalesforce` and `unlinkSalesforce`; `integrations.listCommunityApps` and `getCommunityApp`.
   - OAuth apps: `setLogo`, `removeLogo`, `getListing`, `saveListing`, `deleteListing`, and `listWithAccess`, which also returns `developer_access`.
   - The `CRM_SYNCED` gateway event with a `CRM` intent, 35 more error codes (CRM, Salesforce, listing, logo and API-key ceilings), mailbox test participation fields, richer placement observation counts, and `external` references on pipelines, deals, tasks and notes.
+  - `warmbly.integrations.apollo` (overview, key replacement, lists, import preview, import sources, enrichment runs) and `warmbly.integrations.clay` (settings), with the `apollo` and `clay` providers.
+  - `normalizeIntents` turns `.`, `:`, `-` and spaces into `_`, as the server does, and `ErrorCode` lists the Apollo, Clay, Slack, pool link, mailbox, re-authentication and app attest codes the server sends.
 
   Server sync through `176d3c24`:
 

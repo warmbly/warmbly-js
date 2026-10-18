@@ -66,6 +66,14 @@ describe("intents", () => {
     expect(normalizeIntents([" email ", "Email", "campaign"])).toEqual(["EMAIL", "CAMPAIGN"]);
   });
 
+  it("turns separators into underscores like the server", () => {
+    expect(normalizeIntents(["crm.synced", "warmup-placement", "a:b c"])).toEqual([
+      "CRM_SYNCED",
+      "WARMUP_PLACEMENT",
+      "A_B_C",
+    ]);
+  });
+
   it("returns undefined for empty or all-blank input (full stream)", () => {
     expect(normalizeIntents()).toBeUndefined();
     expect(normalizeIntents([])).toBeUndefined();

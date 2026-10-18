@@ -74,6 +74,7 @@ export type {
   UpdateApiKeyParams,
 } from "./api-keys";
 export { ApiKeys } from "./api-keys";
+export * from "./apollo";
 export type {
   Automation,
   AutomationCondition,
@@ -129,6 +130,7 @@ export type {
   UpdateCampaignStepParams,
 } from "./campaigns";
 export { Campaigns } from "./campaigns";
+export * from "./clay";
 export type {
   AddContactParams,
   AnalyzeContactImportParams,
