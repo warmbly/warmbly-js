@@ -19,9 +19,9 @@ export const GatewayIntents = {
   AUDIT: "AUDIT",
   /** Campaign lifecycle events (`CAMPAIGN_*`). */
   CAMPAIGN: "CAMPAIGN",
-  /** Email/message events (`EMAIL_*`). */
+  /** Email/message events (`EMAIL_*`, which also matches `DIRECT_EMAIL_*`). */
   EMAIL: "EMAIL",
-  /** Contact events (`CONTACT_*`, `CONTACTS_RELOAD`). */
+  /** Contact events (`CONTACT_*`, including `CONTACT_IMPORT_PROGRESS`, and `CONTACTS_RELOAD`). */
   CONTACT: "CONTACT",
   /** Hosted form events (`FORM_SUBMISSION_CREATED`). */
   FORM: "FORM",
@@ -43,8 +43,18 @@ export const GatewayIntents = {
   AI: "AI",
   /** AI contact-research progress (`AI_RESEARCH_PROGRESS`). */
   RESEARCH: "RESEARCH",
+  /** Warmup events (`WARMUP_PLACEMENT`). */
+  WARMUP: "WARMUP",
+  /** Inbox placement test events (`PLACEMENT_TEST_UPDATED`, also matches `WARMUP_PLACEMENT`). */
+  PLACEMENT: "PLACEMENT",
+  /** Hand-written mail tracking events (`DIRECT_EMAIL_OPENED`, `DIRECT_EMAIL_CLICKED`). */
+  DIRECT: "DIRECT",
+  /** Import progress events (`MAILBOX_IMPORT_PROGRESS`, `CONTACT_IMPORT_PROGRESS`). */
+  IMPORT: "IMPORT",
   /** Billing and AI-credit events (`BILLING_CREDITS_LOW`, `BILLING_CREDITS_CHANGED`). */
   BILLING: "BILLING",
+  /** Connected CRM sync events (`CRM_SYNCED`). */
+  CRM: "CRM",
 } as const;
 
 /** A known intent family name. */
@@ -54,7 +64,8 @@ export type GatewayIntent = (typeof GatewayIntents)[keyof typeof GatewayIntents]
 export const ALL_INTENTS: GatewayIntent[] = Object.values(GatewayIntents);
 
 /**
- * Normalizes a list of intents: trims, uppercases, and drops empties and duplicates.
+ * Normalizes a list of intents: trims, uppercases, turns `.`, `:`, `-` and spaces into `_` like the
+ * server does, and drops empties and duplicates.
  * Returns `undefined` when nothing remains, which the server reads as the full stream.
  *
  * @example
@@ -64,7 +75,10 @@ export function normalizeIntents(intents?: string[]): string[] | undefined {
   if (!intents || intents.length === 0) return undefined;
   const seen = new Set<string>();
   for (const raw of intents) {
-    const value = raw.trim().toUpperCase();
+    const value = raw
+      .trim()
+      .toUpperCase()
+      .replace(/[.:\s-]+/g, "_");
     if (value) seen.add(value);
   }
   return seen.size > 0 ? [...seen] : undefined;

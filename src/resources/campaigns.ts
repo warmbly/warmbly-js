@@ -2,7 +2,12 @@ import type { Page } from "../core/pagination";
 import type { RequestOptions } from "../core/types";
 import { APIResource } from "./base";
 
-/** Whether a campaign is a multi-step sequence or a single one-time email. */
+/**
+ * Whether a campaign is a multi-step sequence or a single one-time email.
+ *
+ * @deprecated The server dropped campaign kinds: it no longer returns `kind`, ignores the
+ * `kind` filter on list, and no longer reports a `one_time` count on the overview.
+ */
 export type CampaignKind = "sequence" | "one_time";
 
 /** A Warmbly campaign. Shape is documented-but-open. */
@@ -10,7 +15,17 @@ export interface Campaign {
   id: string;
   name?: string;
   status?: string;
+  /**
+   * @deprecated The server no longer returns a campaign kind or accepts `one_time`
+   * campaigns. Kept so existing code still compiles; it is always absent.
+   */
   kind?: CampaignKind;
+  /** The zone the schedule is read in. Empty means the campaign follows the workspace zone. */
+  timezone?: string;
+  /** The zone actually in use, resolved on read: `timezone`, else the workspace's. */
+  effective_timezone?: string;
+  /** Holds a contact's first email back this many minutes after they enter the campaign. */
+  entry_delay_minutes?: number;
   /** Keep running for new leads: out of leads, the campaign stays active and waits. */
   continuous?: boolean;
   /** Set while a continuous campaign is waiting for leads; null otherwise. */
@@ -97,6 +112,12 @@ export interface CampaignStep {
   body_code?: boolean;
   /** Days to wait before this step, counted from the contact's previous one (0..60). */
   wait_after?: number;
+  /**
+   * Send this step as a reply in the conversation the contact's earlier campaign email
+   * started, instead of opening a new thread. Defaults to true; it only has an effect once
+   * the contact has already received an email from the campaign.
+   */
+  thread_reply?: boolean;
   position?: number;
   /** Canvas coordinates. Written only through {@link Campaigns.setStepLayout}. */
   x?: number;
@@ -121,6 +142,8 @@ export interface UpdateCampaignStepParams {
   body_code?: boolean;
   /** Days to wait before this step (0..60), not minutes. */
   wait_after?: number;
+  /** Reply in the contact's existing thread instead of opening a new one. */
+  thread_reply?: boolean;
   /** Replaces the step's outgoing connections. Send `{}` to leave it with none. */
   conditions?: { branches?: StepBranch[]; [key: string]: unknown };
   action?: StepAction;
@@ -148,17 +171,31 @@ export interface CampaignAttachment {
 
 /** A campaign log entry. */
 export interface CampaignLog {
+  id?: string;
+  campaign_id?: string;
+  event_type?: string;
+  message?: string;
+  metadata?: Record<string, unknown>;
+  created_at?: string;
   [key: string]: unknown;
 }
 
 /** Body for creating a campaign. Open shape. */
 export interface CreateCampaignParams {
   name?: string;
-  /** `sequence` (default) or `one_time`. Fixed at creation. */
+  /**
+   * @deprecated The server no longer reads a campaign kind; this field is ignored.
+   */
   kind?: CampaignKind;
   /** Keep running for new leads instead of finishing. Linking a segment turns it on. */
   continuous?: boolean;
-  /** Initial steps in order; each routes to the next after its `wait_after` days. */
+  /** Hold each contact's first email back this many minutes after they enter the campaign. */
+  entry_delay_minutes?: number;
+  /**
+   * Initial steps in order; each routes to the next after its `wait_after` days. A step
+   * written here replies in the first email's thread (`thread_reply`) unless it carries
+   * its own subject or you pass `thread_reply: false`.
+   */
   steps?: Array<Record<string, unknown>>;
   utm_tracking?: boolean;
   utm_source?: string;
@@ -171,6 +208,8 @@ export interface CreateCampaignParams {
 export interface UpdateCampaignParams {
   name?: string;
   continuous?: boolean;
+  /** Hold each contact's first email back this many minutes after they enter the campaign. */
+  entry_delay_minutes?: number;
   /** Send `null` to clear the date and start now. */
   start_date?: string | null;
   /** Send `null` to run open-ended. */
@@ -186,7 +225,12 @@ export interface UpdateCampaignParams {
 export interface ListCampaignsParams {
   cursor?: string;
   limit?: number;
+  /** Text search over campaign names. */
+  q?: string;
+  /** Restrict to one folder. */
+  folder?: string;
   status?: string;
+  /** @deprecated The server ignores the `kind` filter. */
   kind?: CampaignKind;
   [key: string]: unknown;
 }
@@ -212,6 +256,14 @@ export interface EstimateCampaignParams {
   timezone?: string;
   /** RFC 3339. Omit for now. */
   start_date?: string;
+  /** Daily sending window start, `HH:MM`. Omit for the scheduler's default window. */
+  start_time?: string;
+  /** Daily sending window end, `HH:MM`. */
+  end_time?: string;
+  /** Each follow-up's `wait_after` in days, in order, at most 30. Empty is a single email. */
+  step_waits?: number[];
+  /** Project a saved campaign, filling anything not sent from it. */
+  campaign_id?: string;
   [key: string]: unknown;
 }
 
@@ -224,6 +276,70 @@ export interface CampaignEstimate {
   /** `null` when the audience is empty, the pool has no capacity, or the send takes over two years. */
   sending_days: number | null;
   estimated_finish_at: string | null;
+  /** How many emails each contact receives. */
+  steps?: number;
+  /** Recipients times steps, assuming nobody replies or unsubscribes. */
+  total_sends?: number;
+  /** The day the last contact gets their first email. */
+  first_touch_finish_at?: string | null;
+  /** The pool's sending-day capacity once every mailbox has graduated from warmup. */
+  steady_capacity?: number;
+  /** The first day the pool reaches `steady_capacity`; null when it already has or never does. */
+  full_capacity_at?: string | null;
+  /** Mailboxes still climbing their warmup graduation ceiling. */
+  ramping?: number;
+  /** Mailboxes contributing nothing today. */
+  held?: number;
+  warmup?: { mailboxes: number; per_day: number; [key: string]: unknown };
+  /** What the pool already sends for other campaigns on an average recent day. */
+  other_campaigns_per_day?: number;
+  /** The clamp that costs the most sends on the first sending day; empty when mailbox caps are the limit. */
+  bottleneck?: CampaignEstimateBottleneck;
+  /** The projection day by day, at most 120 days. */
+  timeline?: CampaignEstimateDay[];
+  /** The pool mailbox by mailbox, at most 200. */
+  senders?: CampaignEstimateSender[];
+  [key: string]: unknown;
+}
+
+/** What limits a campaign estimate's first sending day. */
+export type CampaignEstimateBottleneck =
+  | ""
+  | "campaign_limit"
+  | "warmup_graduation"
+  | "spacing"
+  | "other_campaigns"
+  | "health"
+  | "held"
+  | "workspace_risk"
+  | "org_daily_limit"
+  | "sending_behavior"
+  | (string & {});
+
+/** One calendar day of a campaign estimate's projection. */
+export interface CampaignEstimateDay {
+  date: string;
+  sending_day: boolean;
+  capacity: number;
+  sends: number;
+  first_emails: number;
+  follow_ups: number;
+  warmup: number;
+  [key: string]: unknown;
+}
+
+/** One mailbox's part in a campaign estimate. */
+export interface CampaignEstimateSender {
+  id: string;
+  email: string;
+  provider: string;
+  /** `ready`, `ramping`, `throttled`, `health_hold`, `domain_auth`, `resting`, `no_worker`,
+   * `send_recovery`, `send_cooldown` or `send_authority`. */
+  state: string;
+  first_day_cap: number;
+  steady_cap: number;
+  warmup_per_day: number;
+  full_cap_at: string | null;
   [key: string]: unknown;
 }
 
@@ -255,6 +371,237 @@ export interface CampaignFormStats {
   starters?: number;
   submissions?: number;
   share_url?: string;
+  [key: string]: unknown;
+}
+
+/** Why a lead's flow is held. */
+export type CampaignLeadHoldSource =
+  | "manual"
+  | "out_of_office"
+  | "inbox_tagging"
+  | "cc"
+  /** A CRM rule: a lead status, a conversion, or an open opportunity in Salesforce. */
+  | "crm"
+  | (string & {});
+
+/**
+ * One lead's flow parked inside one campaign. The contact stays subscribed and stays a
+ * lead; this is not an unsubscribe. `until` is absent for a hold with no end, which only a
+ * resume lifts.
+ */
+export interface CampaignLeadHold {
+  since: string;
+  until?: string;
+  reason?: string;
+  source: CampaignLeadHoldSource;
+  [key: string]: unknown;
+}
+
+/** The answer of the lead hold endpoints. `hold` is absent when the lead is not held. */
+export interface CampaignLeadHoldState {
+  campaign_id: string;
+  contact_id: string;
+  hold?: CampaignLeadHold;
+  [key: string]: unknown;
+}
+
+/** Body for {@link Campaigns.pauseLead}. Both fields are optional. */
+export interface PauseLeadParams {
+  /** RFC 3339. Omit or send `null` to hold with no end. */
+  until?: string | null;
+  reason?: string;
+}
+
+/** Whether a copied contact is on the lead's next email, and if not why. */
+export type CampaignLeadCCStatus =
+  | "active"
+  | "unsubscribed"
+  | "bounced"
+  | "undeliverable"
+  | (string & {});
+
+/** A contact copied on every email one campaign sends one lead. */
+export interface CampaignLeadCC {
+  contact_id: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  company?: string;
+  /** Anything but `active` is left off the next email. */
+  status: CampaignLeadCCStatus;
+  bounced_at?: string;
+  [key: string]: unknown;
+}
+
+/** The answer of the lead CC read and write. */
+export interface CampaignLeadCCState {
+  campaign_id: string;
+  contact_id: string;
+  cc: CampaignLeadCC[];
+  [key: string]: unknown;
+}
+
+/** A contact who looks like a colleague of the lead, offered first when picking who to copy. */
+export interface CampaignLeadCCSuggestion {
+  contact_id: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  company?: string;
+  /** `company` when the company names match, `domain` when only the email domain does. */
+  reason: "company" | "domain" | (string & {});
+  [key: string]: unknown;
+}
+
+/** Which seed panel a placement test runs against. */
+export type CampaignPlacementPanel = "instance" | "workspace" | "cloud" | (string & {});
+
+/** A campaign's scheduled placement test, which re-tests its first step on a schedule. */
+export interface CampaignPlacementMonitor {
+  id: string;
+  campaign_id: string;
+  created_by: string | null;
+  enabled: boolean;
+  /** Days between tests. */
+  interval_days: number;
+  panel: CampaignPlacementPanel;
+  /** Alert when the inbox rate falls below this percentage (0..100). */
+  alert_below: number;
+  /** Pause the campaign when an alert fires. */
+  pause_on_alert: boolean;
+  next_run_at: string;
+  last_run_at: string | null;
+  last_test_id: string | null;
+  last_alert_at: string | null;
+  last_error?: string;
+  created_at: string;
+  updated_at: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Body for {@link Campaigns.putPlacementMonitor}. Every field is optional: a new monitor
+ * starts enabled, and fields you omit keep their current value.
+ */
+export interface PutPlacementMonitorParams {
+  enabled?: boolean;
+  /** Days between tests, within the deployment's allowed band. */
+  interval_days?: number;
+  panel?: CampaignPlacementPanel;
+  /** 0..100. */
+  alert_below?: number;
+  pause_on_alert?: boolean;
+}
+
+/** One clamp in a send plan's waterfall and how many of today's emails it removed. */
+export interface CampaignSendLimit {
+  /**
+   * `campaign_daily_limit`, `campaign_ramp`, `warmup_graduation`, `workspace_risk`,
+   * `domain_auth`, `resting`, `warmup_health_hold`, `send_recovery`, `send_cooldown`, `other_campaigns`, `warmup_health_pace`,
+   * `mailbox_hours`, `spacing`, `sending_window`, `not_running`, `org_daily_limit`,
+   * `new_lead_cap`, `leads` or `sending_behavior`.
+   */
+  kind: string;
+  /** How many sends this clamp removed from today's total. */
+  emails: number;
+  /** How many of the pool's mailboxes it touched. Absent for a campaign-level clamp. */
+  mailboxes?: number;
+  [key: string]: unknown;
+}
+
+/** The campaign's calendar for today. */
+export interface CampaignSendWindow {
+  /** False when the schedule has no window today. */
+  sending_day: boolean;
+  open_now: boolean;
+  /** The next opening when the window is closed now; may be on a later day. */
+  opens_at?: string;
+  closes_at?: string;
+  minutes_left: number;
+  starts_at?: string;
+  ends_at?: string;
+  [key: string]: unknown;
+}
+
+/** How many leads are due, so the plan shows the other half of the number. */
+export interface CampaignLeadSupply {
+  due_now: number;
+  due_later_today: number;
+  new_leads_due_today: number;
+  waiting_on_step: number;
+  waiting_on_condition: number;
+  /** Leads paused (out of office, or by hand). */
+  held: number;
+  waiting_on_sender: number;
+  new_leads_started_today: number;
+  /** 0 when unlimited. */
+  max_new_leads_per_day: number;
+  next_due_at?: string;
+  [key: string]: unknown;
+}
+
+/** One mailbox's day on a campaign. */
+export interface CampaignMailboxPlan {
+  id: string;
+  email: string;
+  provider: string;
+  configured_cap: number;
+  cap_today: number;
+  /** `mailbox_daily_cap`, `campaign_daily_limit`, `campaign_ramp`, `warmup_graduation` or `workspace_risk`. */
+  limited_by: string;
+  sent_today: number;
+  sent_by_other_campaigns: number;
+  expected_remaining: number;
+  /**
+   * `sending`, `budget_spent`, `hours_closed`, `no_working_day`, `domain_auth`, `resting`,
+   * `health_hold`, `send_recovery`, `send_cooldown`, `send_authority`, `window_closed` or `no_worker`.
+   */
+  state: string;
+  reopens_at?: string;
+  /** The warmup health band when it is not healthy. */
+  health?: string;
+  min_gap_seconds: number;
+  /** Set while the warmup graduation ceiling holds the mailbox below its own cap. */
+  graduation?: {
+    ceiling: number;
+    mailbox_cap: number;
+    days_to_full_cap: number;
+    held: boolean;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+/**
+ * What one campaign will send today and why. Derived on read through the scheduler's own
+ * gates: `configured_ceiling` minus every `limits` entry minus `sent_today` equals
+ * `expected_remaining`.
+ */
+export interface CampaignSendPlan {
+  campaign_id: string;
+  status: string;
+  /** The UTC budget day the plan counts. */
+  day: string;
+  /** The campaign's own timezone, which the window's times are in. */
+  timezone: string;
+  computed_at: string;
+  /** True when served from a snapshot the campaign has since outrun; a refreshed plan follows. */
+  stale: boolean;
+  configured_ceiling: number;
+  /** Today's total: sent so far plus still expected. */
+  projected_today: number;
+  sent_today: number;
+  expected_remaining: number;
+  /** The limit that decides `projected_today`, `budget_spent`, or empty when nothing binds. */
+  bottleneck: string;
+  limits: CampaignSendLimit[];
+  window: CampaignSendWindow;
+  leads: CampaignLeadSupply;
+  mailboxes: CampaignMailboxPlan[];
+  /** The workspace's plan-level daily allowance. Absent when unlimited. */
+  organization?: { daily_limit: number; sent_today: number; remaining: number };
+  /** When the campaign's chain next runs. Absent when it has no pending wakeup. */
+  next_wake_at?: string;
   [key: string]: unknown;
 }
 
@@ -439,19 +786,29 @@ export class Campaigns extends APIResource {
   /**
    * Atomically replaces the campaign's linked segments (up to 20). Every current member
    * of a newly linked segment is enrolled at once, and later joiners are enrolled
-   * automatically. Send an empty array to detach every segment. Retries are safe.
-   * Returns the resulting links plus how many leads this call enrolled.
+   * automatically. Send an empty array to detach every segment. Detaching a segment
+   * withdraws the leads it brought, except those the campaign has already written to or
+   * somebody added by hand. Retries are safe. Returns the resulting links, how many leads
+   * this call enrolled (`added`), how many it withdrew (`withdrawn`), and how many of the
+   * detached audience the campaign had already contacted and so kept (`contacted`).
    * @example
-   * const { data, added } = await warmbly.campaigns.setSegments("camp_1", ["seg_1", "seg_2"]);
+   * const { data, added, withdrawn } = await warmbly.campaigns.setSegments("camp_1", ["seg_1"]);
    */
   setSegments(
     id: string,
     segmentIds: string[],
-  ): Promise<{ data: CampaignSegmentLink[]; added: number }> {
-    return this.http.put<{ data: CampaignSegmentLink[]; added: number }>(
-      this.path("campaigns", id, "segments"),
-      { body: { segment_ids: segmentIds } },
-    );
+  ): Promise<{
+    data: CampaignSegmentLink[];
+    added: number;
+    withdrawn: number;
+    contacted: number;
+  }> {
+    return this.http.put<{
+      data: CampaignSegmentLink[];
+      added: number;
+      withdrawn: number;
+      contacted: number;
+    }>(this.path("campaigns", id, "segments"), { body: { segment_ids: segmentIds } });
   }
 
   /**
@@ -607,11 +964,18 @@ export class Campaigns extends APIResource {
   }
 
   /**
-   * Adds a step to a campaign sequence. The endpoint creates a new empty step for the
-   * campaign and returns it; edit its content afterwards with {@link Campaigns.updateStep}.
+   * Adds a step to a campaign sequence and returns it. The body is optional: send the same
+   * fields {@link Campaigns.updateStep} takes (as `opts.body`) to fill the new step in one
+   * call, in which case a body the server refuses leaves no blank step behind. Without a
+   * body the step is created empty.
    * @example
    * const step = await warmbly.campaigns.createStep("camp_1");
    * await warmbly.campaigns.updateStep("camp_1", step.id, { subject: "Follow up" });
+   *
+   * @example
+   * const step = await warmbly.campaigns.createStep("camp_1", {
+   *   body: { subject: "Follow up", wait_after: 3 },
+   * });
    */
   createStep(id: string, opts?: RequestOptions): Promise<CampaignStep> {
     return this.http.post<CampaignStep>(this.path("campaigns", id, "steps"), opts);
@@ -673,5 +1037,172 @@ export class Campaigns extends APIResource {
       this.path("campaigns", id, "tracking-domain", "verify"),
       { body: params },
     );
+  }
+
+  /**
+   * Returns today's sending plan: what the campaign will send today and every limit that
+   * decided it, read through the scheduler's own gates. Needs `READ_CAMPAIGNS`.
+   *
+   * @example
+   * const plan = await warmbly.campaigns.sendPlan("camp_1");
+   * console.log(plan.projected_today, plan.bottleneck);
+   */
+  sendPlan(id: string, opts?: RequestOptions): Promise<CampaignSendPlan> {
+    return this.http.get<CampaignSendPlan>(this.path("campaigns", id, "send-plan"), opts);
+  }
+
+  /**
+   * Reads whether one lead's flow is currently held. The answer carries no `hold` when it
+   * is not. Needs `READ_CAMPAIGNS`.
+   *
+   * @example
+   * const { hold } = await warmbly.campaigns.getLeadHold("camp_1", "c_1");
+   */
+  getLeadHold(
+    id: string,
+    contactId: string,
+    opts?: RequestOptions,
+  ): Promise<CampaignLeadHoldState> {
+    return this.http.get<CampaignLeadHoldState>(
+      this.path("campaigns", id, "leads", contactId, "hold"),
+      opts,
+    );
+  }
+
+  /**
+   * Parks one contact's flow inside one campaign until a date, or with no end. The
+   * contact stays subscribed and stays a lead. Pausing an already held lead replaces the
+   * hold and keeps its start. The body is an absolute state, so retries are safe. Needs
+   * `WRITE_CAMPAIGNS`.
+   *
+   * @example
+   * await warmbly.campaigns.pauseLead("camp_1", "c_1", {
+   *   until: "2026-11-01T00:00:00Z",
+   *   reason: "Back from leave",
+   * });
+   */
+  pauseLead(
+    id: string,
+    contactId: string,
+    params?: PauseLeadParams,
+  ): Promise<CampaignLeadHoldState> {
+    return this.http.post<CampaignLeadHoldState>(
+      this.path("campaigns", id, "leads", contactId, "pause"),
+      { body: params },
+    );
+  }
+
+  /**
+   * Lifts a lead's hold now. Resuming a lead that is not held succeeds; a contact that is
+   * not a lead of the campaign is a 404. Needs `WRITE_CAMPAIGNS`.
+   *
+   * @example
+   * await warmbly.campaigns.resumeLead("camp_1", "c_1");
+   */
+  resumeLead(id: string, contactId: string, opts?: RequestOptions): Promise<CampaignLeadHoldState> {
+    return this.http.post<CampaignLeadHoldState>(
+      this.path("campaigns", id, "leads", contactId, "resume"),
+      opts,
+    );
+  }
+
+  /**
+   * Lists the contacts copied on every email this campaign sends one lead. Needs
+   * `READ_CAMPAIGNS` and `READ_CONTACTS`.
+   *
+   * @example
+   * const { cc } = await warmbly.campaigns.getLeadCC("camp_1", "c_1");
+   */
+  getLeadCC(id: string, contactId: string, opts?: RequestOptions): Promise<CampaignLeadCCState> {
+    return this.http.get<CampaignLeadCCState>(
+      this.path("campaigns", id, "leads", contactId, "cc"),
+      opts,
+    );
+  }
+
+  /**
+   * Replaces the contacts copied on one lead, follow-ups included. An empty list removes
+   * them all. The body is the whole list, so retries are safe. A copied contact who is also
+   * a lead of the campaign has their own sequence held while any lead copies them. Needs
+   * `WRITE_CAMPAIGNS` and `READ_CONTACTS`.
+   *
+   * @example
+   * const { cc } = await warmbly.campaigns.setLeadCC("camp_1", "c_1", ["c_2", "c_3"]);
+   */
+  setLeadCC(id: string, contactId: string, contactIds: string[]): Promise<CampaignLeadCCState> {
+    return this.http.put<CampaignLeadCCState>(
+      this.path("campaigns", id, "leads", contactId, "cc"),
+      { body: { contact_ids: contactIds } },
+    );
+  }
+
+  /**
+   * Offers the lead's likely colleagues to copy: contacts at the same company or email
+   * domain. Needs `READ_CAMPAIGNS` and `READ_CONTACTS`.
+   *
+   * @example
+   * const suggestions = await warmbly.campaigns.suggestLeadCC("camp_1", "c_1");
+   */
+  suggestLeadCC(
+    id: string,
+    contactId: string,
+    opts?: RequestOptions,
+  ): Promise<CampaignLeadCCSuggestion[]> {
+    return this.http
+      .get<{ data: CampaignLeadCCSuggestion[] }>(
+        this.path("campaigns", id, "leads", contactId, "cc", "suggestions"),
+        opts,
+      )
+      .then((r) => r.data ?? []);
+  }
+
+  /**
+   * Reads the campaign's scheduled placement test, or `null` when it has none. Needs
+   * `READ_CAMPAIGNS`.
+   *
+   * @example
+   * const monitor = await warmbly.campaigns.getPlacementMonitor("camp_1");
+   */
+  getPlacementMonitor(id: string, opts?: RequestOptions): Promise<CampaignPlacementMonitor | null> {
+    return this.http
+      .get<{ data: CampaignPlacementMonitor | null }>(
+        this.path("campaigns", id, "placement-monitor"),
+        opts,
+      )
+      .then((r) => r.data ?? null);
+  }
+
+  /**
+   * Creates or updates the campaign's scheduled placement test. A new or re-enabled
+   * monitor runs its first test within minutes. The same body always lands on the same
+   * state, so retries are safe. Needs `SEND_CAMPAIGNS`.
+   *
+   * @example
+   * const monitor = await warmbly.campaigns.putPlacementMonitor("camp_1", {
+   *   interval_days: 7,
+   *   alert_below: 80,
+   *   pause_on_alert: true,
+   * });
+   */
+  putPlacementMonitor(
+    id: string,
+    params: PutPlacementMonitorParams = {},
+  ): Promise<CampaignPlacementMonitor> {
+    return this.http
+      .put<{ data: CampaignPlacementMonitor }>(this.path("campaigns", id, "placement-monitor"), {
+        body: params,
+      })
+      .then((r) => r.data);
+  }
+
+  /**
+   * Removes the campaign's scheduled placement test. A 404 when it has none. Needs
+   * `SEND_CAMPAIGNS`.
+   *
+   * @example
+   * await warmbly.campaigns.deletePlacementMonitor("camp_1");
+   */
+  deletePlacementMonitor(id: string, opts?: RequestOptions): Promise<void> {
+    return this.http.delete<void>(this.path("campaigns", id, "placement-monitor"), opts);
   }
 }

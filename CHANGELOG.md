@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.4.0
+
+### Minor Changes
+
+- 1d3f3cd: **Breaking (types, and request shapes that never matched the server):**
+
+  - `contacts.search` and `contacts.list` now send `cursor` and `limit` in the query string, as the server reads them. Before, they went in the body, so page two repeated page one and auto-paging never ended.
+  - `contacts.add` sends the bare array the server binds, not `{ contacts: [...] }`.
+  - `contacts.importPreview(file, { filename })` and `importCommit(file, options, { filename })` now upload multipart, as the server expects. `ContactImportParams` is removed.
+  - `contacts.bulkDelete` returns `void` and accepts ids or a selection; `contacts.export` returns the file text; `contacts.lookup` returns `{ contact, match }`; `contacts.listNotes` returns a `Page`; `contacts.deals` returns `Deal[]`.
+  - `crm.listTasks`, `listDeals`, `searchTasks` and `searchDeals` return a `Page`; `crm.createTask` requires `title`; `CrmTask` now has the server's real fields.
+  - `unibox.thread` returns a `Page`; `unsnooze` returns `void`; reply, snooze and label calls use the server's field names; `UniboxItem.from` is `string[]`.
+  - `templates.reorder` takes `{ ids }`; templates use `body_html` and `body_plain`.
+  - `integrations.pushConnection` requires its params; `ApiKey.allowed_ips` and `allowed_email_accounts` are optional.
+
+  **New:**
+
+  - `warmbly.placement` (inbox placement tests and batches, seeds, coverage, overview) and `warmbly.emailImages`.
+  - `contacts` background imports (`createImport`, `listImports`, `getImport`, `saveImportDraft`, `analyzeImport`, `startImport`, `cancelImport`, `importFailures`) and a typed `ContactSelection` for bulk actions.
+  - `campaigns.sendPlan`, per-lead `getLeadHold`, `pauseLead`, `resumeLead`, `getLeadCC`, `setLeadCC`, `suggestLeadCC`, and the placement monitor methods.
+  - `crm.bulkUpdateTasks` and `bulkDeleteTasks`, `emails.identity`, `refreshIdentity`, `setDirectTracking`, `updateSync`, `unibox.moveFolder`, `integrations.rotateInboundUrl` and `setSigningKey`, `templates.analyze`, `apiKeys.delete`, and `analytics.direct`, `inboxTagging` and `warmupPlacement`.
+  - Gateway events `WARMUP_PLACEMENT`, `PLACEMENT_TEST_UPDATED`, `DIRECT_EMAIL_OPENED`, `DIRECT_EMAIL_CLICKED`, `MAILBOX_IMPORT_PROGRESS` and `CONTACT_IMPORT_PROGRESS`, with `WARMUP`, `PLACEMENT`, `DIRECT` and `IMPORT` intents. Account and email events type `email_account_id`, the key the server sends.
+  - 89 newly documented error codes in `ErrorCode`, and many new fields on campaigns, contacts, email accounts, unibox, forms, segments and integrations.
+  - `warmbly.integrations.salesforce`: overview, settings, metadata, users, list views, campaigns, import preview, import sources (create, update, run, delete), activity with retry, and `syncNow`.
+  - CRM sync on `crm` for HubSpot, Pipedrive and Salesforce: settings, metadata, owners and `mapOwner`, `syncHealth`, `syncNow`, retry and discard of sync failures, backfill, CRM contact records (get, refresh, link, update), and list import (`listLists`, `previewListImport`, `importList`).
+  - `contacts.salesforce`, `syncSalesforce` and `unlinkSalesforce`; `integrations.listCommunityApps` and `getCommunityApp`.
+  - OAuth apps: `setLogo`, `removeLogo`, `getListing`, `saveListing`, `deleteListing`, and `listWithAccess`, which also returns `developer_access`.
+  - The `CRM_SYNCED` gateway event with a `CRM` intent, 35 more error codes (CRM, Salesforce, listing, logo and API-key ceilings), mailbox test participation fields, richer placement observation counts, and `external` references on pipelines, deals, tasks and notes.
+  - `warmbly.integrations.apollo` (overview, key replacement, lists, import preview, import sources, enrichment runs) and `warmbly.integrations.clay` (settings), with the `apollo` and `clay` providers.
+  - `normalizeIntents` turns `.`, `:`, `-` and spaces into `_`, as the server does, and `ErrorCode` lists the Apollo, Clay, Slack, pool link, mailbox, re-authentication and app attest codes the server sends.
+
+  Server sync through `176d3c24`:
+
+  - `analytics.dashboard` now sends `period` (`7d`, `30d` or `90d`), which is what the server reads. It sent `from` and `to` before, which the dashboard ignores, so the window was always 7 days. It also takes `campaign_ids` and `folder_ids` to narrow the campaign sections, and the response types the `scope` echo (`DashboardParams`, `DashboardAnalytics`, `DashboardScope`).
+  - `ReplyBreakdown` types the new `reply_breakdown` in campaign analytics; the new `positive_replies`, `interested_leads` and `positive_reply_rate` fields pass through the report.
+  - Campaign estimate and send plan document the new `send_recovery`, `send_cooldown` and `send_authority` states.
+  - `SendRecoveryResolution` gains `message_id`, `provider_msg_id` and `thread_id`.
+  - `ErrorCode` gains `member_access_restricted`, `invalid_access_resource`, `invalid_access_scope`, `too_many_access_grants` and `owner_access_unrestricted`, returned when a member restricted to selected resources, or a key or app acting for one, calls a route outside their grants.
+
 ## 0.3.0
 
 ### Minor Changes

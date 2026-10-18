@@ -47,7 +47,8 @@ WARMBLY_API_KEY=wmbly_... npx tsx examples/rest.ts
 | [`ai-generation.ts`](./ai-generation.ts) | Writing, rewriting, AI variables, contact research, AI skills |
 | [`templates.ts`](./templates.ts) | Reply templates: render, score, duplicate, reorder |
 | [`crm.ts`](./crm.ts) | Pipelines, deals, task types, and tasks |
-| [`integrations.ts`](./integrations.ts) | Connections, events, field mappings, push, bookings |
+| [`crm-sync.ts`](./crm-sync.ts) | HubSpot/Pipedrive CRM mode, the native Salesforce sync, a contact's Salesforce panel, `CRM_SYNCED` |
+| [`integrations.ts`](./integrations.ts) | Connections, events, field mappings, push, bookings, the community directory |
 | [`automations-and-lead-sync.ts`](./automations-and-lead-sync.ts) | Flow builder, meetings, Google Sheets lead sync |
 
 ## OAuth2
