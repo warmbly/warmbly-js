@@ -392,7 +392,7 @@ Subscribe to live workspace events over a single WebSocket. The gateway client i
 ```ts
 const gw = warmbly.gateway({
   orgId: "org_123",
-  intents: ["EMAIL", "CAMPAIGN", "CUSTOM"], // filter the stream
+  intents: ["EMAIL", "CAMPAIGN", "CUSTOM", "PLACEMENT", "IMPORT", "CRM"], // filter the stream
 });
 
 gw.on("EMAIL_OPENED", (e) => console.log("opened", e.campaign_id));

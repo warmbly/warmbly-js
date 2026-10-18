@@ -187,6 +187,17 @@ describe("Apollo", () => {
     expect(out.verified_only).toBe(true);
   });
 
+  it("createImportSource() forwards a caller idempotency key", async () => {
+    const { http, fetchMock } = clientWith(source, { status: 201 });
+    await new Apollo(http).createImportSource(
+      "conn_1",
+      { list_id: "lst_1" },
+      { idempotencyKey: "apollo-src-1" },
+    );
+    const { init } = lastCall(fetchMock);
+    expect(new Headers(init.headers).get("idempotency-key")).toBe("apollo-src-1");
+  });
+
   it("updateImportSource() PATCHes and can clear the campaign", async () => {
     const { http, fetchMock } = clientWith(source);
     await new Apollo(http).updateImportSource("conn_1", "src_1", {

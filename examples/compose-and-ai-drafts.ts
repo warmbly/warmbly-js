@@ -90,11 +90,12 @@ if (thread) {
     thread_id: threadId,
     instruction: "decline politely and suggest revisiting next quarter",
   });
-  if (reply.text) {
+  if (reply.text && thread.email_id) {
+    const subject = thread.subject ?? "";
     await warmbly.unibox.reply({
-      email_account_id: thread.email_id ?? "mb_1",
+      email_account_id: thread.email_id,
       to: thread.from_addr ?? [],
-      subject: thread.subject ? `Re: ${thread.subject}` : "Re:",
+      subject: /^re:/i.test(subject) ? subject : `Re: ${subject}`,
       body_plain: reply.text,
       thread_id: threadId,
     });

@@ -104,8 +104,13 @@ export class Clay extends APIResource {
    *   defaults: { campaign_id: "camp_1", category_ids: [], segment_ids: [], dedup: "update", subscribed: true },
    * });
    */
-  updateSettings(connectionId: string, params: UpdateClaySettingsParams): Promise<ClaySettings> {
+  updateSettings(
+    connectionId: string,
+    params: UpdateClaySettingsParams,
+    opts?: RequestOptions,
+  ): Promise<ClaySettings> {
     return this.http.patch<ClaySettings>(this.path("integrations", "clay", connectionId), {
+      ...opts,
       body: params,
     });
   }

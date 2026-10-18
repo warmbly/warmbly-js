@@ -198,8 +198,12 @@ export class Apollo extends APIResource {
    * @example
    * await warmbly.integrations.apollo.replaceKey("conn_1", { api_key: process.env.APOLLO_API_KEY! });
    */
-  replaceKey(connectionId: string, params: { api_key: string }): Promise<ApolloOverview> {
-    return this.http.put<ApolloOverview>(this.base(connectionId, "key"), { body: params });
+  replaceKey(
+    connectionId: string,
+    params: { api_key: string },
+    opts?: RequestOptions,
+  ): Promise<ApolloOverview> {
+    return this.http.put<ApolloOverview>(this.base(connectionId, "key"), { ...opts, body: params });
   }
 
   /**
@@ -224,8 +228,10 @@ export class Apollo extends APIResource {
   previewImport(
     connectionId: string,
     params: { list_id: string; verified_only?: boolean },
+    opts?: RequestOptions,
   ): Promise<ApolloPreview> {
     return this.http.post<ApolloPreview>(this.base(connectionId, "import", "preview"), {
+      ...opts,
       body: params,
     });
   }
@@ -244,7 +250,8 @@ export class Apollo extends APIResource {
 
   /**
    * Saves a list import and starts its first run (answers 201). People are deduplicated by
-   * address, so a retried create makes a second source whose run imports nothing new.
+   * address, so a retried create makes a second source whose run imports nothing new; pass
+   * an `idempotencyKey` in `opts` to replay the first response instead.
    * Needs `INTEGRATIONS`.
    * @example
    * const source = await warmbly.integrations.apollo.createImportSource("conn_1", { list_id: "lst_1" });
@@ -252,8 +259,10 @@ export class Apollo extends APIResource {
   createImportSource(
     connectionId: string,
     params: CreateApolloImportSourceParams,
+    opts?: RequestOptions,
   ): Promise<ApolloImportSource> {
     return this.http.post<ApolloImportSource>(this.base(connectionId, "import-sources"), {
+      ...opts,
       body: params,
     });
   }
@@ -269,10 +278,11 @@ export class Apollo extends APIResource {
     connectionId: string,
     sourceId: string,
     params: UpdateApolloImportSourceParams,
+    opts?: RequestOptions,
   ): Promise<ApolloImportSource> {
     return this.http.patch<ApolloImportSource>(
       this.base(connectionId, "import-sources", sourceId),
-      { body: params },
+      { ...opts, body: params },
     );
   }
 
@@ -283,9 +293,14 @@ export class Apollo extends APIResource {
    * @example
    * const source = await warmbly.integrations.apollo.runImportSource("conn_1", "src_1");
    */
-  runImportSource(connectionId: string, sourceId: string): Promise<ApolloImportSource> {
+  runImportSource(
+    connectionId: string,
+    sourceId: string,
+    opts?: RequestOptions,
+  ): Promise<ApolloImportSource> {
     return this.http.post<ApolloImportSource>(
       this.base(connectionId, "import-sources", sourceId, "run"),
+      opts,
     );
   }
 
