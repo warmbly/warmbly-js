@@ -529,11 +529,36 @@ describe("Gateway credential placement", () => {
     gw.close();
   });
 
-  it("falls back to the URL in a browser, where a socket takes no headers", async () => {
+  it("refuses a long-lived token in a browser before opening a socket", async () => {
     vi.stubGlobal("window", {});
     vi.stubGlobal("document", {});
     try {
-      const gw = new Gateway({ orgId: "org_1", token: "wmbly_x", webSocket: FakeCtor });
+      const ctor = vi.fn();
+      const gw = new Gateway({
+        orgId: "org_1",
+        token: "wmbly_x",
+        webSocket: ctor as unknown as WebSocketCtor,
+      });
+      const error = vi.fn();
+      gw.on("error", error);
+      await expect(gw.connect()).rejects.toBeInstanceOf(GatewayError);
+      expect(error).toHaveBeenCalledWith(expect.any(GatewayError));
+      expect(ctor).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("puts a long-lived token in the URL in a browser only with allowTokenInUrl", async () => {
+    vi.stubGlobal("window", {});
+    vi.stubGlobal("document", {});
+    try {
+      const gw = new Gateway({
+        orgId: "org_1",
+        token: "wmbly_x",
+        webSocket: FakeCtor,
+        allowTokenInUrl: true,
+      });
       void gw.connect().catch(() => undefined);
       const socket = await nextSocket();
       expect(socket.url).toContain("&token=wmbly_x");

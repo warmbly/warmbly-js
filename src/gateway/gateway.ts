@@ -87,6 +87,7 @@ export class Gateway {
   private readonly autoReconnect: boolean;
   private readonly maxReconnectDelayMs: number;
   private readonly logger: GatewayOptions["logger"];
+  private readonly allowTokenInUrl: boolean;
 
   private connection: Connection | undefined;
   private orgJoinRef: string | undefined;
@@ -113,6 +114,7 @@ export class Gateway {
     this.autoReconnect = options.autoReconnect ?? true;
     this.maxReconnectDelayMs = options.maxReconnectDelayMs ?? DEFAULT_MAX_RECONNECT_DELAY_MS;
     this.logger = options.logger;
+    this.allowTokenInUrl = options.allowTokenInUrl ?? false;
   }
 
   /** The current lifecycle state. */
@@ -269,11 +271,24 @@ export class Gateway {
       throw error;
     }
 
+    const longLived = isLongLivedToken(token);
+    const browser = isBrowserRuntime();
+    // Browsers cannot set headers on a WebSocket, so a long-lived credential could only go in
+    // the URL, which proxies record and the server refuses by default. Fail before sending it.
+    if (longLived && browser && !this.allowTokenInUrl) {
+      const error = new GatewayError(
+        "An API key or OAuth access token cannot be sent from a browser, because a browser " +
+          "WebSocket takes no headers and the URL would expose it. Pass getToken returning a " +
+          "connection token, or set allowTokenInUrl for a server that accepts it there.",
+        { code: GatewayCloseCode.NOT_AUTHENTICATED },
+      );
+      this.emitter.emit("error", error);
+      throw error;
+    }
+
     const Ctor = await resolveWebSocket(this.injectedWebSocket);
     this.setState("connecting");
-    // Browsers cannot set headers on a WebSocket; there the credential stays in the URL and
-    // the server's refusal explains how to proceed (mint a connection token instead).
-    const inHeader = isLongLivedToken(token) && !isBrowserRuntime();
+    const inHeader = longLived && !browser;
     const socket = inHeader
       ? new Ctor(this.buildSocketUrl(token, true), { headers: { [CREDENTIAL_HEADER]: token } })
       : new Ctor(this.buildSocketUrl(token, false));

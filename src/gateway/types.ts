@@ -51,6 +51,14 @@ export interface GatewayOptions {
   maxReconnectDelayMs?: number;
   /** Optional logger; defaults to a no-op so nothing is written to the console. */
   logger?: GatewayLogger;
+  /**
+   * Lets a browser page put an API key or OAuth access token in the socket URL, which is
+   * the only place a browser WebSocket can carry it. Off by default: the realtime server
+   * refuses a long-lived credential there unless `REALTIME_ALLOW_QUERY_CREDENTIALS` is set,
+   * and a URL is recorded by proxies. Prefer `getToken` with a connection token in a
+   * browser. Has no effect outside a browser, where the header is used.
+   */
+  allowTokenInUrl?: boolean;
 }
 
 /**

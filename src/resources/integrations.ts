@@ -93,8 +93,8 @@ export interface IntegrationConnection {
   updated_at?: string;
   /**
    * Calendly, Cal.com and Clay connections only: the inbound path to paste into the
-   * provider, such as `/api/v1/integrations/inbound/clay/<secret>`. Prefix it with your
-   * API base URL. Returned on create, and again by {@link Integrations.rotateInboundUrl}
+   * provider, such as `/api/v1/integrations/inbound/clay/<secret>`. Prefix it with the API
+   * origin only (`https://api.warmbly.com`, not the `/v1` base URL). Returned on create, and again by {@link Integrations.rotateInboundUrl}
    * as its own field.
    */
   inbound_webhook_url?: string;
@@ -401,7 +401,8 @@ export class Integrations extends APIResource {
 
   /**
    * Mints a new inbound URL for a Calendly, Cal.com or Clay connection and returns its
-   * path, which you prefix with your API base URL. The previous URL stops working
+   * path, which you prefix with the API origin only (`https://api.warmbly.com`, not the
+   * `/v1` base URL). The previous URL stops working
    * immediately, so update the provider's webhook before relying on it. Any other
    * provider is a 400. Needs `INTEGRATIONS`.
    * @example
