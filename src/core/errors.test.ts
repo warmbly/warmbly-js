@@ -3,6 +3,7 @@ import {
   AuthenticationError,
   BadRequestError,
   ConflictError,
+  type ErrorCode,
   GatewayError,
   InternalServerError,
   NotFoundError,
@@ -160,6 +161,37 @@ describe("WarmblyAPIError.from requestId and code", () => {
     expect(err.code).toBe("rate_limit_exceeded");
   });
 
+  it("maps the CRM and Salesforce refusal codes onto the typed statuses", () => {
+    const managed = WarmblyAPIError.from(409, {
+      error: "Conflict",
+      message: "Pipelines are managed in HubSpot.",
+      code: "crm_managed_externally",
+    });
+    expect(managed).toBeInstanceOf(ConflictError);
+    const code: ErrorCode | undefined = managed.code;
+    expect(code).toBe("crm_managed_externally");
+    const limited = WarmblyAPIError.from(429, { code: "salesforce_rate_limited" });
+    expect(limited).toBeInstanceOf(RateLimitError);
+    expect(limited.code).toBe("salesforce_rate_limited");
+    expect(WarmblyAPIError.from(403, { code: "oauth_token_not_allowed" }).code).toBe(
+      "oauth_token_not_allowed",
+    );
+  });
+
+  it("types the selected-resource scope refusals", () => {
+    const err = WarmblyAPIError.from(403, {
+      error: "Forbidden",
+      message: "Your access to this workspace is limited to selected campaigns and mailboxes.",
+      code: "member_access_restricted",
+      request_id: "req_1",
+    });
+    const code: ErrorCode | undefined = err.code;
+    expect(code).toBe("member_access_restricted");
+    expect(WarmblyAPIError.from(400, { code: "too_many_access_grants" }).code).toBe(
+      "too_many_access_grants",
+    );
+  });
+
   it("passes through the headers", () => {
     const headers = new Headers({ "x-trace": "abc" });
     const err = WarmblyAPIError.from(404, {}, headers);
@@ -314,5 +346,29 @@ describe("GatewayError", () => {
     const cause = new Error("ws closed");
     const err = new GatewayError("rejected", { cause });
     expect((err as { cause?: unknown }).cause).toBe(cause);
+  });
+});
+
+describe("WarmblyAPIError reason", () => {
+  it("exposes the finer reason key and tolerates its absence", () => {
+    const withReason = WarmblyAPIError.from(400, {
+      code: "mailbox_tls_failed",
+      reason: "certificate_untrusted",
+      message: "The server certificate is not trusted.",
+    });
+    expect(withReason.code).toBe("mailbox_tls_failed");
+    expect(withReason.reason).toBe("certificate_untrusted");
+    expect(WarmblyAPIError.from(400, { code: "bad_request" }).reason).toBeUndefined();
+  });
+
+  it("keeps the Retry-After of a retryable 503 refusal readable from the headers", () => {
+    const err = WarmblyAPIError.from(
+      503,
+      { code: "attempt_check_unavailable", message: "try again" },
+      new Headers({ "retry-after": "5" }),
+    );
+    expect(err.status).toBe(503);
+    expect(err.code).toBe("attempt_check_unavailable");
+    expect(err.headers?.get("retry-after")).toBe("5");
   });
 });

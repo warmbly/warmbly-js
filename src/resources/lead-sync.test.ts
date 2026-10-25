@@ -71,6 +71,17 @@ describe("LeadSync", () => {
     expect(url).toContain("/lead-sync/sources");
   });
 
+  it("listSources() filters by campaign or segment and decodes segment_ids", async () => {
+    const { http, fetchMock } = clientWith({
+      data: [{ id: "ls_1", segment_ids: ["seg_1"], category_ids: [] }],
+    });
+    const sources = await new LeadSync(http).listSources({ segment_id: "seg_1" });
+    expect(lastCall(fetchMock).url).toContain("segment_id=seg_1");
+    expect(sources[0]?.segment_ids).toEqual(["seg_1"]);
+    await new LeadSync(http).listSources({ campaign_id: "camp_1" });
+    expect(lastCall(fetchMock).url).toContain("campaign_id=camp_1");
+  });
+
   it("listSources() returns an empty array when the envelope has no data", async () => {
     const { http } = clientWith({});
     await expect(new LeadSync(http).listSources()).resolves.toEqual([]);
@@ -106,6 +117,15 @@ describe("LeadSync", () => {
     expect(init.method).toBe("PATCH");
     expect(url).toContain("/lead-sync/sources/ls_1");
     expect(JSON.parse(String(init.body))).toEqual({ dedup: "skip" });
+  });
+
+  it("updateSource() sends clear_campaign and segment_ids", async () => {
+    const { http, fetchMock } = clientWith({ id: "ls_1" });
+    await new LeadSync(http).updateSource("ls_1", { clear_campaign: true, segment_ids: ["seg_1"] });
+    expect(JSON.parse(String(lastCall(fetchMock).init.body))).toEqual({
+      clear_campaign: true,
+      segment_ids: ["seg_1"],
+    });
   });
 
   it("deleteSource() DELETEs one source", async () => {

@@ -1,10 +1,14 @@
 import type { HttpClient } from "../core/http";
 import type { Page } from "../core/pagination";
+import type { RequestOptions } from "../core/types";
 import type {
   AuthorizedApp,
+  OAuthAppListing,
+  OAuthAppListingWrite,
   OAuthApplication,
   OAuthApplicationWithSecret,
   OAuthApplicationWrite,
+  OAuthDeveloperAccess,
   WebhookDelivery,
   WebhookEndpointHealth,
 } from "./types";
@@ -21,8 +25,10 @@ function unwrapList<T>(
 }
 
 /**
- * Manages OAuth applications and their webhook configuration. Uses the bearer-authenticated
- * {@link HttpClient}, so the underlying credential needs the `API_KEYS` (manage api keys) scope.
+ * Manages OAuth applications, their logo, their community directory listing, and their
+ * webhook configuration. Uses the bearer-authenticated {@link HttpClient}, so the underlying
+ * credential needs the `API_KEYS` (manage api keys) scope. An OAuth app token is always
+ * refused here (403, code `oauth_token_not_allowed`): use the dashboard or an API key.
  *
  * @example
  * const apps = new OAuthApplications(http);
@@ -51,6 +57,28 @@ export class OAuthApplications {
       OAuthApplication[] | { data?: OAuthApplication[]; applications?: OAuthApplication[] }
     >("/oauth/applications");
     return unwrapList(payload);
+  }
+
+  /**
+   * Lists the organization's OAuth applications together with whether this workspace and
+   * caller may register and publish apps (`developer_access`). Needs `API_KEYS`.
+   *
+   * @example
+   * const { applications, developer_access } = await warmbly.oauthApplications.listWithAccess();
+   * if (developer_access.blocked) console.log(developer_access.reason);
+   */
+  async listWithAccess(
+    opts?: RequestOptions,
+  ): Promise<{ applications: OAuthApplication[]; developer_access: OAuthDeveloperAccess }> {
+    const payload = await this.http.get<{
+      applications?: OAuthApplication[];
+      data?: OAuthApplication[];
+      developer_access?: OAuthDeveloperAccess;
+    }>("/oauth/applications", opts);
+    return {
+      applications: unwrapList(payload),
+      developer_access: payload?.developer_access ?? { blocked: false },
+    };
   }
 
   /**
@@ -128,6 +156,99 @@ export class OAuthApplications {
     const form = new FormData();
     form.append("file", file, filename);
     return this.http.post<{ logo_url: string }>("/oauth/application-logo", { body: form });
+  }
+
+  /**
+   * Uploads and sets an existing application's logo as `multipart/form-data` and returns
+   * the updated application. PNG or JPEG, under 2 MB and at least 32 px on each side; the
+   * server re-encodes it and removes the previous logo. Needs `API_KEYS`.
+   *
+   * @example
+   * const app = await warmbly.oauthApplications.setLogo("app_1", file, { filename: "logo.png" });
+   * console.log(app.logo_url);
+   */
+  async setLogo(
+    id: string,
+    file: Blob,
+    params?: { filename?: string },
+    opts?: RequestOptions,
+  ): Promise<OAuthApplication> {
+    const form = new FormData();
+    // Name the part only when there is a name: a non-spec FormData would otherwise
+    // stringify an explicit undefined into "undefined".
+    if (params?.filename !== undefined) form.append("file", file, params.filename);
+    else form.append("file", file);
+    return this.http.post<OAuthApplication>(`/oauth/applications/${encodeURIComponent(id)}/logo`, {
+      ...opts,
+      body: form,
+    });
+  }
+
+  /**
+   * Removes the application's logo and returns the updated application. Needs `API_KEYS`.
+   *
+   * @example
+   * const app = await warmbly.oauthApplications.removeLogo("app_1");
+   */
+  async removeLogo(id: string, opts?: RequestOptions): Promise<OAuthApplication> {
+    return this.http.delete<OAuthApplication>(
+      `/oauth/applications/${encodeURIComponent(id)}/logo`,
+      opts,
+    );
+  }
+
+  /**
+   * Returns the application's community directory listing, or `null` when it is not
+   * published. Needs `API_KEYS`.
+   *
+   * @example
+   * const listing = await warmbly.oauthApplications.getListing("app_1");
+   */
+  async getListing(id: string, opts?: RequestOptions): Promise<OAuthAppListing | null> {
+    const payload = await this.http.get<{ listing: OAuthAppListing | null }>(
+      `/oauth/applications/${encodeURIComponent(id)}/listing`,
+      opts,
+    );
+    return payload?.listing ?? null;
+  }
+
+  /**
+   * Publishes the application to the community directory, or edits its listing. Saving
+   * the same listing again changes nothing, so retries are safe. A disabled, suspended or
+   * dynamically registered app is a 400 with code `app_not_listable`. Needs `API_KEYS`.
+   *
+   * @example
+   * const listing = await warmbly.oauthApplications.saveListing("app_1", {
+   *   slug: "acme-sync",
+   *   tagline: "Two-way sync with Acme",
+   *   category: "crm",
+   *   install_url: "https://acme.example.com/install",
+   * });
+   */
+  async saveListing(
+    id: string,
+    body: OAuthAppListingWrite,
+    opts?: RequestOptions,
+  ): Promise<OAuthAppListing> {
+    const payload = await this.http.put<{ listing: OAuthAppListing }>(
+      `/oauth/applications/${encodeURIComponent(id)}/listing`,
+      { ...opts, body },
+    );
+    return payload.listing;
+  }
+
+  /**
+   * Unpublishes the application. A listing the operators hid cannot be removed (409, code
+   * `listing_hidden`). Needs `API_KEYS`.
+   *
+   * @example
+   * await warmbly.oauthApplications.deleteListing("app_1");
+   */
+  async deleteListing(id: string, opts?: RequestOptions): Promise<{ deleted: boolean }> {
+    return this.http.delete<{ deleted: boolean }>(
+      `/oauth/applications/${encodeURIComponent(id)}/listing`,
+      opts,
+    );
   }
 
   /**

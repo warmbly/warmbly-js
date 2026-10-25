@@ -40,10 +40,12 @@ describe("Forms", () => {
     const { http, fetchMock } = clientWith({
       base_url: "https://f.warmbly.com",
       captcha_available: true,
+      triage_available: false,
     });
     const out = await new Forms(http).config();
     expect(lastCall(fetchMock).url).toMatch(/\/forms\/config$/);
     expect(out.captcha_available).toBe(true);
+    expect(out.triage_available).toBe(false);
   });
 
   it("create POSTs the name to /forms", async () => {
@@ -62,6 +64,17 @@ describe("Forms", () => {
     expect(lastCall(fetchMock).url).toContain("/forms/f1");
   });
 
+  it("get decodes redirect_url_active for a redirect off the workspace's own domains", async () => {
+    const { http } = clientWith({
+      id: "f1",
+      name: "Demo",
+      redirect_url: "https://elsewhere.example/thanks",
+      redirect_url_active: false,
+    });
+    const out = await new Forms(http).get("f1");
+    expect(out.redirect_url_active).toBe(false);
+  });
+
   it("update PATCHes /forms/:id and passes a null campaign_id through", async () => {
     const { http, fetchMock } = clientWith({ id: "f1", status: "published" });
     await new Forms(http).update("f1", { status: "published", campaign_id: null });
@@ -69,6 +82,28 @@ describe("Forms", () => {
     expect(init.method).toBe("PATCH");
     expect(url).toContain("/forms/f1");
     expect(JSON.parse(String(init.body))).toEqual({ status: "published", campaign_id: null });
+  });
+
+  it("update sends triage_enabled and a submission decodes its triage verdict", async () => {
+    const { http, fetchMock } = clientWith({ id: "f1", triage_enabled: true });
+    const form = await new Forms(http).update("f1", { triage_enabled: true });
+    expect(JSON.parse(String(lastCall(fetchMock).init.body))).toEqual({ triage_enabled: true });
+    expect(form.triage_enabled).toBe(true);
+    const { http: http2 } = clientWith({
+      data: [
+        {
+          id: "s1",
+          triage: "job_seeker",
+          triage_confidence: 0.82,
+          created_at: "2026-10-04T09:00:00Z",
+        },
+        { id: "s2", triage: "a_new_verdict", triage_confidence: 0.4 },
+      ],
+      has_more: false,
+    });
+    const list = await new Forms(http2).listSubmissions("f1");
+    expect(list.data[0]?.triage).toBe("job_seeker");
+    expect(list.data[1]?.triage).toBe("a_new_verdict");
   });
 
   it("delete DELETEs /forms/:id", async () => {

@@ -51,6 +51,14 @@ export interface GatewayOptions {
   maxReconnectDelayMs?: number;
   /** Optional logger; defaults to a no-op so nothing is written to the console. */
   logger?: GatewayLogger;
+  /**
+   * Lets a browser page put an API key or OAuth access token in the socket URL, which is
+   * the only place a browser WebSocket can carry it. Off by default: the realtime server
+   * refuses a long-lived credential there unless `REALTIME_ALLOW_QUERY_CREDENTIALS` is set,
+   * and a URL is recorded by proxies. Prefer `getToken` with a connection token in a
+   * browser. Has no effect outside a browser, where the header is used.
+   */
+  allowTokenInUrl?: boolean;
 }
 
 /**
@@ -173,7 +181,10 @@ export interface WebSocketLike {
  * const socket = new ctor("wss://example.com");
  */
 export interface WebSocketCtor {
-  new (url: string, protocols?: string | string[]): WebSocketLike;
+  new (
+    url: string,
+    protocols?: string | string[] | { headers?: Record<string, string> },
+  ): WebSocketLike;
 }
 
 /** Standard WebSocket `readyState` values, redeclared so no DOM lib is required. */
@@ -229,9 +240,9 @@ export function isRejectionCloseCode(code: number | undefined): code is GatewayC
 export function describeCloseCode(code: number | undefined): string {
   switch (code) {
     case GatewayCloseCode.NOT_AUTHENTICATED:
-      return "not authenticated: no token was supplied";
+      return "not authenticated: no token was supplied, or an API key or OAuth token was sent in the URL instead of the x-warmbly-token header";
     case GatewayCloseCode.AUTH_FAILED:
-      return "auth failed: token expired or invalid";
+      return "auth failed: token expired, already used, its session signed out, or invalid";
     case GatewayCloseCode.MALFORMED_TOPIC:
       return "malformed topic: fix the channel id, retrying will not help";
     case GatewayCloseCode.RATE_LIMITED:

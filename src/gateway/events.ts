@@ -38,13 +38,26 @@ export interface CampaignEvent extends GatewayEventBase {
 export interface EmailEvent extends GatewayEventBase {
   /** The affected email/message id. */
   email_id?: string;
-  /** The campaign the email belongs to, when applicable. */
+  /**
+   * The campaign the email belongs to. Absent on `EMAIL_OPENED`/`EMAIL_CLICKED` for a
+   * hand-written send (and always on the `DIRECT_EMAIL_*` events).
+   */
   campaign_id?: string;
+  /**
+   * The mailbox the message was sent from or received on. This is the key the server
+   * sends on inbox and tracking events (`email_account_id`).
+   */
+  email_account_id?: string;
   /** The contact the email relates to, when applicable. */
   contact_id?: string;
   contact_email?: string;
-  /** The email account the message was sent from or received on, when applicable. */
+  /**
+   * Legacy alias for {@link EmailEvent.email_account_id}. The server never sends this
+   * key; prefer `email_account_id`.
+   */
   account_id?: string;
+  /** The provider message id, on inbox events (`EMAIL_RECEIVED`, `EMAIL_UPDATED`). */
+  message_id?: string;
   /** The conversation thread id, when applicable. */
   thread_id?: string;
   org_id?: string;
@@ -65,20 +78,66 @@ export interface EmailEvent extends GatewayEventBase {
   occurred_at?: string;
   /** The mail client or browser, when the consumer could tell. */
   client?: string;
+  /** Whether the open came from a mail `app` or `webmail`, when known. */
+  client_type?: "app" | "webmail" | (string & {});
+  /** True when a mailbox provider's image proxy fetched it, so the device is unknowable. */
+  device_hidden?: boolean;
   device_type?: string;
+  /** The reader's operating system, when the consumer could tell. */
+  os?: string;
+  /** The reader's browser, when the consumer could tell. */
+  browser?: string;
   country_code?: string;
   city?: string;
 }
 
+/**
+ * A hand-written (non-campaign) email sent through a mailbox that opted into tracking was
+ * opened or clicked. Org-scoped and gated on the `view_analytics` member permission. It
+ * carries no campaign, contact or step: refetch `analytics.direct()` for the numbers.
+ *
+ * @example
+ * gw.on("DIRECT_EMAIL_OPENED", (e) => console.log(e.email_account_id, e.machine));
+ */
+export interface DirectEmailEvent extends GatewayEventBase {
+  event_type: "DIRECT_EMAIL_OPENED" | "DIRECT_EMAIL_CLICKED";
+  org_id?: string;
+  /** The mailbox the tracked message was sent from. */
+  email_account_id?: string;
+  /** True for an automated open (a mail client prefetch or a security scanner). Never set on a click. */
+  machine?: boolean;
+  /** When the tracking service saw it; `timestamp` is the publish time. */
+  occurred_at?: string;
+}
+
 /** An email account (mailbox) connection or health event. */
 export interface AccountEvent extends GatewayEventBase {
-  /** The affected account's id. */
+  /** The affected mailbox's id. This is the key the server sends. */
+  email_account_id?: string;
+  /** Legacy alias for {@link AccountEvent.email_account_id}; the server never sends it. */
   account_id?: string;
   org_id?: string;
   email?: string;
   provider?: string;
   status?: string;
   reason?: string;
+  error_code?: string;
+  error_message?: string;
+  /** On `ACCOUNT_HEALTH_CHANGED`: the new and previous warmup health states. */
+  health_state?: string;
+  previous_state?: string;
+}
+
+/**
+ * A partner mailbox saw one of the workspace's warmup emails land. `status` is where it
+ * landed: `inbox`, `tabs` or `spam`. Gated on `manage_emails`, like every `WARMUP`
+ * event. Refetch `analytics.warmupPlacement()` for the numbers.
+ *
+ * @example
+ * gw.on("WARMUP_PLACEMENT", (e) => console.log(e.email_account_id, e.status));
+ */
+export interface WarmupPlacementEvent extends AccountEvent {
+  event_type: "WARMUP_PLACEMENT";
 }
 
 /**
@@ -132,12 +191,17 @@ export interface ContactEvent extends GatewayEventBase {
 /** A signal that the contact list should be reloaded wholesale. */
 export interface ContactsReloadEvent extends GatewayEventBase {
   event_type: "CONTACTS_RELOAD";
+  /** Set when every member of the workspace should reload (a change no single member made). */
+  org_id?: string;
+  operation_id?: string;
 }
 
 /** A bulk operation lifecycle or progress event. */
 export interface BulkEvent extends GatewayEventBase {
   /** The bulk operation's id. */
   operation_id?: string;
+  /** The organization the operation belongs to, when it is org-routed (e.g. `CONTACTS_RELOAD`). */
+  org_id?: string;
   /** Items processed so far, when reported. */
   processed?: number;
   /** Total items in the operation, when reported. */
@@ -153,6 +217,20 @@ export interface TaskProgressEvent extends GatewayEventBase {
   progress?: number;
   /** A human-readable status, when reported. */
   status?: string;
+  /** The campaign the task belongs to. */
+  campaign_id?: string;
+  org_id?: string;
+  contact_id?: string;
+  contact_email?: string;
+  step_id?: string;
+  /** Contacts in the campaign. */
+  total_contacts?: number;
+  /**
+   * Contacts times steps: the unit `processed_count` and `progress` are in (one sent
+   * step, not one finished contact).
+   */
+  total_emails?: number;
+  processed_count?: number;
 }
 
 /** An automation lifecycle or run event. */
@@ -204,6 +282,80 @@ export interface CustomEvent extends GatewayEventBase {
   source_id?: string;
   /** The organization the event belongs to, when provided. */
   org_id?: string;
+}
+
+/**
+ * An inbox placement test or batch moved: a test started, one of its copies got a
+ * verdict, or it finished or was cancelled. Carries ids and status only; refetch
+ * `placement.getTest(test_id)` (or `placement.getBatch(batch_id)`) for the results. A
+ * batch event has `batch_id` in place of `test_id`. Gated on `view_analytics`.
+ *
+ * @example
+ * gw.on("PLACEMENT_TEST_UPDATED", (e) => console.log(e.test_id ?? e.batch_id, e.status));
+ */
+export interface PlacementTestEvent extends GatewayEventBase {
+  event_type: "PLACEMENT_TEST_UPDATED";
+  org_id?: string;
+  /** The test that moved. Absent on a batch-level event. */
+  test_id?: string;
+  /** The batch that moved. Absent on a test event. */
+  batch_id?: string;
+  /** Set for a test of a campaign step. */
+  campaign_id?: string;
+  /** A test's or batch's status (`running`, `completed`, `cancelled`, `failed`, ...). */
+  status?: "running" | "completed" | "cancelled" | "failed" | (string & {});
+}
+
+/**
+ * A mailbox import moved: rows settled (at most once a second per import), or it
+ * completed, was cancelled, or a waiting sign-in row connected. Refetch
+ * `GET /emails/imports/:id`. Gated on `manage_emails`.
+ *
+ * @example
+ * gw.on("MAILBOX_IMPORT_PROGRESS", (e) => console.log(e.import_id, e.status));
+ */
+export interface MailboxImportProgressEvent extends GatewayEventBase {
+  event_type: "MAILBOX_IMPORT_PROGRESS";
+  org_id?: string;
+  import_id?: string;
+  /** `running`, `completed` or `cancelled`. */
+  status?: "running" | "completed" | "cancelled" | (string & {});
+}
+
+/**
+ * A background contact import moved: it was queued and started, rows settled (at most
+ * once a second), or it completed, failed or was cancelled. Refetch
+ * `GET /contacts/imports/:id`. Gated on `view_contacts`.
+ *
+ * @example
+ * gw.on("CONTACT_IMPORT_PROGRESS", (e) => console.log(e.import_id, e.status));
+ */
+export interface ContactImportProgressEvent extends GatewayEventBase {
+  event_type: "CONTACT_IMPORT_PROGRESS";
+  org_id?: string;
+  import_id?: string;
+  /** `queued`, `running`, `completed`, `failed` or `cancelled`. */
+  status?: "queued" | "running" | "completed" | "failed" | "cancelled" | (string & {});
+}
+
+/**
+ * Records mirrored from a connected CRM (HubSpot or Pipedrive) changed: a pull brought
+ * changes in, or a push went out. Carries ids only; refetch the deals, tasks, notes or
+ * contact panel named in `objects`. Not permission-gated beyond org membership, since it
+ * only tells clients to refetch.
+ *
+ * @example
+ * gw.on("CRM_SYNCED", (e) => {
+ *   if (e.objects?.includes("deal")) refetchDeals();
+ * });
+ */
+export interface CrmSyncedEvent extends GatewayEventBase {
+  event_type: "CRM_SYNCED";
+  org_id?: string;
+  /** What changed: `contact`, `deal`, `task`, `note`, `owner`, `pipeline`, ... */
+  objects?: Array<"contact" | "deal" | "task" | "note" | "owner" | "pipeline" | (string & {})>;
+  /** Set when the change was about one contact. */
+  contact_id?: string;
 }
 
 /**
@@ -295,6 +447,10 @@ export interface WarmblyEventMap {
   EMAIL_BOUNCED: EmailEvent;
   EMAIL_UPDATED: EmailEvent;
   EMAIL_DELETED: EmailEvent;
+  /** A hand-written send from a tracking-enabled mailbox was opened (gated on `view_analytics`). */
+  DIRECT_EMAIL_OPENED: DirectEmailEvent;
+  /** A hand-written send from a tracking-enabled mailbox was clicked (gated on `view_analytics`). */
+  DIRECT_EMAIL_CLICKED: DirectEmailEvent;
 
   ACCOUNT_CONNECTED: AccountEvent;
   ACCOUNT_DISCONNECTED: AccountEvent;
@@ -302,11 +458,22 @@ export interface WarmblyEventMap {
   ACCOUNT_SYNCED: AccountEvent;
   ACCOUNT_HEALTH_CHANGED: AccountEvent;
   ACCOUNT_SYNC_STATE: AccountSyncStateEvent;
+  /** A partner saw one of the workspace's warmup emails land (gated on `manage_emails`). */
+  WARMUP_PLACEMENT: WarmupPlacementEvent;
+  /** A placement test or batch moved (gated on `view_analytics`). */
+  PLACEMENT_TEST_UPDATED: PlacementTestEvent;
+  /** A mailbox import moved (gated on `manage_emails`). */
+  MAILBOX_IMPORT_PROGRESS: MailboxImportProgressEvent;
 
   CONTACT_CREATED: ContactEvent;
   CONTACT_UPDATED: ContactEvent;
   CONTACT_DELETED: ContactEvent;
   CONTACTS_RELOAD: ContactsReloadEvent;
+  /** A background contact import moved (gated on `view_contacts`). */
+  CONTACT_IMPORT_PROGRESS: ContactImportProgressEvent;
+
+  /** Mirrored records of a connected CRM changed; refetch what `objects` names. */
+  CRM_SYNCED: CrmSyncedEvent;
 
   PAGE_HIT: PageHitEvent;
   FORM_SUBMISSION_CREATED: FormSubmissionEvent;
@@ -365,6 +532,8 @@ export const WARMBLY_EVENTS = {
   EMAIL_BOUNCED: "EMAIL_BOUNCED",
   EMAIL_UPDATED: "EMAIL_UPDATED",
   EMAIL_DELETED: "EMAIL_DELETED",
+  DIRECT_EMAIL_OPENED: "DIRECT_EMAIL_OPENED",
+  DIRECT_EMAIL_CLICKED: "DIRECT_EMAIL_CLICKED",
 
   ACCOUNT_CONNECTED: "ACCOUNT_CONNECTED",
   ACCOUNT_DISCONNECTED: "ACCOUNT_DISCONNECTED",
@@ -372,11 +541,17 @@ export const WARMBLY_EVENTS = {
   ACCOUNT_SYNCED: "ACCOUNT_SYNCED",
   ACCOUNT_HEALTH_CHANGED: "ACCOUNT_HEALTH_CHANGED",
   ACCOUNT_SYNC_STATE: "ACCOUNT_SYNC_STATE",
+  WARMUP_PLACEMENT: "WARMUP_PLACEMENT",
+  PLACEMENT_TEST_UPDATED: "PLACEMENT_TEST_UPDATED",
+  MAILBOX_IMPORT_PROGRESS: "MAILBOX_IMPORT_PROGRESS",
 
   CONTACT_CREATED: "CONTACT_CREATED",
   CONTACT_UPDATED: "CONTACT_UPDATED",
   CONTACT_DELETED: "CONTACT_DELETED",
   CONTACTS_RELOAD: "CONTACTS_RELOAD",
+  CONTACT_IMPORT_PROGRESS: "CONTACT_IMPORT_PROGRESS",
+
+  CRM_SYNCED: "CRM_SYNCED",
 
   PAGE_HIT: "PAGE_HIT",
   FORM_SUBMISSION_CREATED: "FORM_SUBMISSION_CREATED",
