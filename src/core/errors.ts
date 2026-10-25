@@ -247,6 +247,31 @@ export type ErrorCode =
   | "slack_verify_unavailable"
   | "slack_verify_wrong_account"
   | "usage_cap_exceeded"
+  // Sign-in and session standing, request hygiene, mailbox certificates, image uploads and
+  // own-domain redirects.
+  | "session_ended"
+  | "attempt_check_unavailable"
+  | "code_lookup_limited"
+  | "account_suspended"
+  | "account_sending_suspended"
+  | "account_workspace_create_suspended"
+  | "workspace_sending_suspended"
+  | "reset_link_invalid"
+  | "sessions_not_ended"
+  | "api_credentials_revoke_unsupported"
+  | "invitation_expired"
+  | "invitation_used_or_expired"
+  | "invitation_roles_removed"
+  | "duplicate_query_parameter"
+  | "duplicate_header"
+  | "invalid_tls_pin"
+  | "mailbox_certificate_not_pinned"
+  | "redirect_target_not_own_domain"
+  | "image_unreadable"
+  | "image_format_not_allowed"
+  | "image_too_large"
+  | "image_dimensions_too_large"
+  | "image_too_small"
   | (string & {});
 
 /** Options used to construct a {@link WarmblyAPIError}. */
@@ -254,6 +279,7 @@ export interface WarmblyAPIErrorOptions {
   status: number;
   code?: ErrorCode | undefined;
   requestId?: string | undefined;
+  reason?: string | undefined;
   body?: unknown;
   headers?: Headers | undefined;
 }
@@ -275,6 +301,11 @@ export class WarmblyAPIError extends WarmblyError {
   readonly status: number;
   /** Stable machine-readable error code, when provided. See {@link ErrorCode}. */
   readonly code: ErrorCode | undefined;
+  /**
+   * A finer key some errors add under one `code`, for a client that offers a different next
+   * step (for example `certificate_untrusted` on `mailbox_tls_failed`). Open-ended.
+   */
+  readonly reason: string | undefined;
   /** Request id, useful when contacting support. */
   readonly requestId: string | undefined;
   /** The parsed response body, when available. */
@@ -287,6 +318,7 @@ export class WarmblyAPIError extends WarmblyError {
     this.name = "WarmblyAPIError";
     this.status = options.status;
     this.code = options.code;
+    this.reason = options.reason;
     this.requestId = options.requestId;
     this.body = options.body;
     this.headers = options.headers;
@@ -306,6 +338,7 @@ export class WarmblyAPIError extends WarmblyError {
     const options: WarmblyAPIErrorOptions = {
       status,
       code: parsed.code,
+      reason: typeof parsed.reason === "string" ? parsed.reason : undefined,
       requestId: rid,
       body,
       headers,

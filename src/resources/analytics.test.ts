@@ -474,4 +474,49 @@ describe("Analytics placement and direct mail", () => {
     expect(out.rate.metric?.wilson_95_independence_interval?.lower).toBe(67.2);
     expect(out.daily[0]?.groups[0]?.unknown).toBe(1);
   });
+
+  it("decodes the rescue outcome counters the server now always sends", async () => {
+    const { http } = clientWith({
+      email_account_id: "mb1",
+      summary: {
+        sent: 10,
+        delivered: 9,
+        inbox: 6,
+        tabs: 1,
+        spam: 2,
+        rescued: 5,
+        rescue_requested: 5,
+        rescue_confirmed: 2,
+        rescue_missing: 1,
+        rescue_failed: 1,
+        rescue_unreported: 1,
+        unconfirmed: 1,
+        inbox_rate: 77.7,
+        spam_rate: 22.2,
+      },
+      daily: [
+        {
+          date: "2026-10-01",
+          groups: [
+            {
+              group: "google",
+              inbox: 3,
+              tabs: 0,
+              spam: 1,
+              rescued: 2,
+              rescue_confirmed: 1,
+              rescue_missing: 1,
+              rescue_failed: 0,
+            },
+          ],
+        },
+      ],
+    });
+    const out = await new Analytics(http).warmupPlacement({ email_id: "mb1" });
+    expect(out.summary.rescue_confirmed).toBe(2);
+    expect(out.summary.rescue_missing).toBe(1);
+    expect(out.summary.rescue_failed).toBe(1);
+    expect(out.summary.rescue_unreported).toBe(1);
+    expect(out.daily[0]?.groups[0]?.rescue_confirmed).toBe(1);
+  });
 });

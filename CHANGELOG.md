@@ -39,6 +39,15 @@
   - `SendRecoveryResolution` gains `message_id`, `provider_msg_id` and `thread_id`.
   - `ErrorCode` gains `member_access_restricted`, `invalid_access_resource`, `invalid_access_scope`, `too_many_access_grants` and `owner_access_unrestricted`, returned when a member restricted to selected resources, or a key or app acting for one, calls a route outside their grants.
 
+  Server sync through `ec3e1df7`:
+
+  - The gateway sends an API key or OAuth access token in the `x-warmbly-token` header, because the realtime server now refuses either in the socket URL (close code `4003`). A dashboard connection token still travels in the `token` query parameter. Browsers cannot set WebSocket headers, so there use a connection token (`getToken`); each one opens a single socket, and `getToken` runs before every reconnect.
+  - `warmbly.emails.certificates(id)` reads an SMTP/IMAP mailbox's per-server certificate policy (`tls_unverified`, `tls_pin`), with the `MailboxCertificates`, `MailboxServerCertificate` and `MailCertificate` types.
+  - `WarmblyAPIError.reason` carries the optional finer key some errors add under one `code`, such as `certificate_untrusted` on `mailbox_tls_failed`.
+  - `ErrorCode` gains `session_ended`, `attempt_check_unavailable`, `code_lookup_limited`, `account_suspended`, `account_sending_suspended`, `account_workspace_create_suspended`, `workspace_sending_suspended`, `duplicate_query_parameter`, `duplicate_header`, `invalid_tls_pin`, `mailbox_certificate_not_pinned`, `redirect_target_not_own_domain`, the five `image_*` upload codes, and the reset and invitation codes.
+  - Warmup placement counts gain `rescue_missing`, `rescue_failed` and `rescue_unreported`, and per-group `rescue_confirmed`, `rescue_missing` and `rescue_failed`. `rescue_confirmed` is a number on current servers.
+  - `Form.redirect_url_active` is `false` when the redirect is not on one of the workspace's own domains.
+
 ## 0.3.0
 
 ### Minor Changes

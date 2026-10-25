@@ -39,6 +39,9 @@ import {
 import { resolveWebSocket } from "./websocket";
 
 /** Default gateway base URL when none is supplied. */
+/** The header the realtime server reads an API key or OAuth access token from. */
+const CREDENTIAL_HEADER = "x-warmbly-token";
+
 const DEFAULT_GATEWAY_URL = "wss://realtime.warmbly.com";
 
 /** Default cap on the reconnect backoff, in milliseconds. */
@@ -240,9 +243,14 @@ export class Gateway {
     return this.staticToken;
   }
 
-  /** Builds the connection URL with the negotiated version and the token query parameter. */
-  private buildSocketUrl(token: string): string {
-    return `${this.url}${GATEWAY_SOCKET_PATH}?vsn=${PHOENIX_VSN}&token=${encodeURIComponent(token)}`;
+  /**
+   * Builds the connection URL with the negotiated version. A dashboard connection token rides
+   * in the `token` query parameter; an API key or OAuth token is long-lived, so the server
+   * only takes it in the `x-warmbly-token` header and the URL carries none.
+   */
+  private buildSocketUrl(token: string, inHeader: boolean): string {
+    const base = `${this.url}${GATEWAY_SOCKET_PATH}?vsn=${PHOENIX_VSN}`;
+    return inHeader ? base : `${base}&token=${encodeURIComponent(token)}`;
   }
 
   /** Opens a fresh socket and wires up transport handlers. */
@@ -263,7 +271,12 @@ export class Gateway {
 
     const Ctor = await resolveWebSocket(this.injectedWebSocket);
     this.setState("connecting");
-    const socket = new Ctor(this.buildSocketUrl(token));
+    // Browsers cannot set headers on a WebSocket; there the credential stays in the URL and
+    // the server's refusal explains how to proceed (mint a connection token instead).
+    const inHeader = isLongLivedToken(token) && !isBrowserRuntime();
+    const socket = inHeader
+      ? new Ctor(this.buildSocketUrl(token, true), { headers: { [CREDENTIAL_HEADER]: token } })
+      : new Ctor(this.buildSocketUrl(token, false));
     this.connection = new Connection(socket, {
       onOpen: () => this.handleOpen(),
       onFrame: (frame) => this.handleFrame(frame),
@@ -614,6 +627,17 @@ export class Gateway {
 }
 
 /** Removes any trailing slashes from a URL without a backtracking regex. */
+/** API keys (`wmbly_`) and OAuth access tokens (`wmat_`) outlive any session. */
+function isLongLivedToken(token: string): boolean {
+  return token.startsWith("wmbly_") || token.startsWith("wmat_");
+}
+
+/** Whether the runtime is a browser page, whose WebSocket takes no custom headers. */
+function isBrowserRuntime(): boolean {
+  const g = globalThis as { window?: unknown; document?: unknown };
+  return typeof g.window !== "undefined" && typeof g.document !== "undefined";
+}
+
 function stripTrailingSlash(url: string): string {
   let end = url.length;
   while (end > 0 && url.charCodeAt(end - 1) === 47) end -= 1;

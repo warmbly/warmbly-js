@@ -441,6 +441,20 @@ describe("Emails: identity, direct tracking, sync folders", () => {
     expect(out.skip_folders).toEqual(["Junk"]);
   });
 
+  it("certificates GETs the per-server pin policy", async () => {
+    const { http, fetchMock } = clientWith({
+      smtp: { host: "smtp.example.com", port: 587, tls_unverified: true, tls_pin: "ab".repeat(32) },
+      imap: { host: "imap.example.com", port: 993, tls_unverified: false },
+    });
+    const out = await new Emails(http).certificates("mb1");
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("GET");
+    expect(url).toMatch(/\/emails\/mb1\/certificates$/);
+    expect(out.smtp.tls_pin).toBe("ab".repeat(32));
+    expect(out.imap.tls_unverified).toBe(false);
+    expect(out.imap.tls_pin).toBeUndefined();
+  });
+
   it("sync decodes the skip list and seen folders", async () => {
     const { http } = clientWith({
       state: { backfill_status: "running", folders_skipped_cap: 2 },

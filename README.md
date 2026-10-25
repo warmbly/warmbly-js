@@ -281,10 +281,12 @@ try {
   } else if (err instanceof RateLimitError) {
     console.log("retry after", err.retryAfter, "seconds");
   } else if (err instanceof WarmblyAPIError) {
-    console.error(err.status, err.code, err.requestId);
+    console.error(err.status, err.code, err.reason, err.requestId);
   }
 }
 ```
+
+`err.reason` is an optional finer key under `code`, for example `certificate_untrusted` on `mailbox_tls_failed`.
 
 | Error | When |
 | --- | --- |
@@ -424,6 +426,8 @@ re-sends that join once the budget resets. Every other join refusal is final and
 `error`.
 
 To connect, the token must be an API key with the `REALTIME_SUBSCRIBE` permission, or an OAuth access token with the `realtime_subscribe` scope. The client inherits the token from the `Warmbly` client automatically.
+
+The client sends an API key or OAuth token in the `x-warmbly-token` header, because the realtime server refuses either in the URL. Browsers cannot set WebSocket headers, so in a page pass a short-lived connection token through `getToken`. Each token opens one socket, and `getToken` runs before every reconnect.
 
 Treat event payloads as invalidation signals: they carry ids, not full state. Refetch over REST when you need the current contents.
 

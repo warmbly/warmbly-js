@@ -27,6 +27,40 @@ export interface SendRecoveryResolution {
   [key: string]: unknown;
 }
 
+/** A certificate an SMTP or IMAP server presented, as reported by a connection check. */
+export interface MailCertificate {
+  /** SHA-256 of the leaf's SubjectPublicKeyInfo, lowercase hex. */
+  fingerprint: string;
+  subject?: string;
+  issuer?: string;
+  /** Expiry, RFC 3339. */
+  not_after?: string;
+  self_signed?: boolean;
+  /** Set when the chain also passes certificate-authority and host name verification. */
+  trusted?: boolean;
+  [key: string]: unknown;
+}
+
+/** One server's certificate policy on an SMTP/IMAP mailbox. */
+export interface MailboxServerCertificate {
+  host: string;
+  port: number;
+  /** The owner chose to trust this server on its pinned certificate instead of a certificate authority. */
+  tls_unverified: boolean;
+  /** The confirmed fingerprint (64 lowercase hex characters); absent unless `tls_unverified`. */
+  tls_pin?: string;
+  /** What the server presented on a connection check; absent on a plain read. */
+  observed?: MailCertificate;
+  [key: string]: unknown;
+}
+
+/** An SMTP/IMAP mailbox's certificate policy per server, from {@link Emails.certificates}. */
+export interface MailboxCertificates {
+  smtp: MailboxServerCertificate;
+  imap: MailboxServerCertificate;
+  [key: string]: unknown;
+}
+
 /** A connected sending mailbox (email account). Documented-but-open shape. */
 export interface EmailAccount {
   id: string;
@@ -556,6 +590,18 @@ export class Emails extends APIResource {
     return this.http.put<{ skip_folders: string[] }>(this.path("emails", id, "sync"), {
       body: { skip_folders: skipFolders },
     });
+  }
+
+  /**
+   * Reads an SMTP/IMAP mailbox's certificate policy for each server: whether the owner
+   * trusts it on a pinned certificate instead of a certificate authority, and the pin. Reads
+   * stored state only. Confirming a certificate is a dashboard action. Needs `READ_EMAILS`.
+   * @example
+   * const { smtp, imap } = await warmbly.emails.certificates("mb_1");
+   * if (smtp.tls_unverified) console.log("pinned to", smtp.tls_pin);
+   */
+  certificates(id: string, opts?: RequestOptions): Promise<MailboxCertificates> {
+    return this.http.get<MailboxCertificates>(this.path("emails", id, "certificates"), opts);
   }
 
   /**

@@ -64,6 +64,17 @@ describe("Forms", () => {
     expect(lastCall(fetchMock).url).toContain("/forms/f1");
   });
 
+  it("get decodes redirect_url_active for a redirect off the workspace's own domains", async () => {
+    const { http } = clientWith({
+      id: "f1",
+      name: "Demo",
+      redirect_url: "https://elsewhere.example/thanks",
+      redirect_url_active: false,
+    });
+    const out = await new Forms(http).get("f1");
+    expect(out.redirect_url_active).toBe(false);
+  });
+
   it("update PATCHes /forms/:id and passes a null campaign_id through", async () => {
     const { http, fetchMock } = clientWith({ id: "f1", status: "published" });
     await new Forms(http).update("f1", { status: "published", campaign_id: null });

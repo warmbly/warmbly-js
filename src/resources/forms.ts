@@ -48,6 +48,11 @@ export interface Form {
   design?: FormDesign;
   success_message?: string;
   redirect_url?: string;
+  /**
+   * `false` when `redirect_url` is not on one of the workspace's own domains, so visitors see
+   * `success_message` instead. Absent when there is no redirect.
+   */
+  redirect_url_active?: boolean;
   /** The campaign a submission enrolls the contact into, when set. */
   campaign_id?: string | null;
   category_ids?: string[];

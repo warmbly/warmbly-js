@@ -16,10 +16,12 @@ class FakeWebSocket implements WebSocketLike {
   closeCalls: Array<{ code?: number; reason?: string }> = [];
   readonly sent: string[] = [];
   readonly url: string;
+  readonly options: unknown;
   private readonly handlers = new Map<string, Array<(arg: unknown) => void>>();
 
-  constructor(url: string) {
+  constructor(url: string, options?: unknown) {
     this.url = url;
+    this.options = options;
     FakeWebSocket.instances.push(this);
   }
 
@@ -132,7 +134,9 @@ describe("Gateway connect handshake", () => {
 
     const socket = await connectReady(gw);
 
-    expect(socket.url).toContain("/socket/websocket?vsn=1.0.0&token=wmbly_x");
+    // An API key is long-lived: the server takes it in a header, never in the URL.
+    expect(socket.url).toBe("wss://realtime.warmbly.com/socket/websocket?vsn=1.0.0");
+    expect(socket.options).toEqual({ headers: { "x-warmbly-token": "wmbly_x" } });
     const join = socket.frames().find((f) => f[3] === "phx_join");
     expect(join?.[2]).toBe("org:org_1");
     const joinPayload = join?.[4] as { intents: string[] } | undefined;
@@ -503,6 +507,41 @@ describe("Gateway reconnect and resume", () => {
     expect(gw.state).toBe("closed");
     expect(socket.closeCalls.some((c) => c.code === 1000)).toBe(true);
     expect(reconnecting).not.toHaveBeenCalled();
+  });
+});
+
+describe("Gateway credential placement", () => {
+  it("sends an OAuth access token in the header too", async () => {
+    const gw = new Gateway({ orgId: "org_1", token: "wmat_y", webSocket: FakeCtor });
+    void gw.connect().catch(() => undefined);
+    const socket = await nextSocket();
+    expect(socket.url).not.toContain("token=");
+    expect(socket.options).toEqual({ headers: { "x-warmbly-token": "wmat_y" } });
+    gw.close();
+  });
+
+  it("keeps a connection token in the query string with no header", async () => {
+    const gw = new Gateway({ orgId: "org_1", token: "conn_token", webSocket: FakeCtor });
+    void gw.connect().catch(() => undefined);
+    const socket = await nextSocket();
+    expect(socket.url).toContain("&token=conn_token");
+    expect(socket.options).toBeUndefined();
+    gw.close();
+  });
+
+  it("falls back to the URL in a browser, where a socket takes no headers", async () => {
+    vi.stubGlobal("window", {});
+    vi.stubGlobal("document", {});
+    try {
+      const gw = new Gateway({ orgId: "org_1", token: "wmbly_x", webSocket: FakeCtor });
+      void gw.connect().catch(() => undefined);
+      const socket = await nextSocket();
+      expect(socket.url).toContain("&token=wmbly_x");
+      expect(socket.options).toBeUndefined();
+      gw.close();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 

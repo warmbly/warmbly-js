@@ -280,8 +280,17 @@ export interface WarmupPlacementCounts {
   legacy_uninstrumented_receipts?: number;
   /** Spam placements a rescue was asked for (the same count as `rescued`). */
   rescue_requested?: number;
-  /** Rescues the recipient confirmed; `null` while not instrumented. */
+  /**
+   * Rescues the recipient's worker confirmed left the message out of spam. Older servers sent
+   * `null` while a mailbox was not instrumented.
+   */
   rescue_confirmed?: number | null;
+  /** Rescues whose message was gone by the time the recipient looked. */
+  rescue_missing?: number;
+  /** Rescues the recipient's worker tried and could not complete. */
+  rescue_failed?: number;
+  /** Requested rescues no worker has answered yet. */
+  rescue_unreported?: number;
   /** Inbox plus tabs share of delivered, as an observation metric. */
   non_spam_metric?: ObservationMetric | null;
   [key: string]: unknown;
@@ -315,6 +324,9 @@ export interface WarmupPlacementGroupCounts {
   tabs: number;
   spam: number;
   rescued: number;
+  rescue_confirmed?: number;
+  rescue_missing?: number;
+  rescue_failed?: number;
   unknown?: number;
   archived?: number;
   custom?: number;
