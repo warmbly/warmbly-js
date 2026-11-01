@@ -647,10 +647,24 @@ function isLongLivedToken(token: string): boolean {
   return token.startsWith("wmbly_") || token.startsWith("wmat_");
 }
 
-/** Whether the runtime is a browser page, whose WebSocket takes no custom headers. */
+/**
+ * Whether the runtime is a browser page or web worker, whose WebSocket takes no custom
+ * headers. Deno and Bun also define worker globals but accept headers, so they are excluded.
+ */
 function isBrowserRuntime(): boolean {
-  const g = globalThis as { window?: unknown; document?: unknown };
-  return typeof g.window !== "undefined" && typeof g.document !== "undefined";
+  const g = globalThis as {
+    window?: unknown;
+    document?: unknown;
+    WorkerGlobalScope?: unknown;
+    Deno?: unknown;
+    Bun?: unknown;
+  };
+  if (typeof g.window !== "undefined" && typeof g.document !== "undefined") return true;
+  return (
+    typeof g.WorkerGlobalScope !== "undefined" &&
+    typeof g.Deno === "undefined" &&
+    typeof g.Bun === "undefined"
+  );
 }
 
 function stripTrailingSlash(url: string): string {

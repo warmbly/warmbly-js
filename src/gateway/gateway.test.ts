@@ -549,6 +549,37 @@ describe("Gateway credential placement", () => {
     }
   });
 
+  it("treats a web worker as a browser and refuses a long-lived token", async () => {
+    vi.stubGlobal("WorkerGlobalScope", class {});
+    try {
+      const ctor = vi.fn();
+      const gw = new Gateway({
+        orgId: "org_1",
+        token: "wmat_y",
+        webSocket: ctor as unknown as WebSocketCtor,
+      });
+      await expect(gw.connect()).rejects.toBeInstanceOf(GatewayError);
+      expect(ctor).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("keeps the header in Deno, which defines worker globals but accepts headers", async () => {
+    vi.stubGlobal("WorkerGlobalScope", class {});
+    vi.stubGlobal("Deno", {});
+    try {
+      const gw = new Gateway({ orgId: "org_1", token: "wmat_y", webSocket: FakeCtor });
+      void gw.connect().catch(() => undefined);
+      const socket = await nextSocket();
+      expect(socket.url).not.toContain("token=");
+      expect(socket.options).toEqual({ headers: { "x-warmbly-token": "wmat_y" } });
+      gw.close();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("puts a long-lived token in the URL in a browser only with allowTokenInUrl", async () => {
     vi.stubGlobal("window", {});
     vi.stubGlobal("document", {});
