@@ -8,7 +8,7 @@ import { Warmbly } from "warmbly";
 const warmbly = new Warmbly({ apiKey: process.env.WARMBLY_API_KEY });
 
 // 1. List inbox conversations. list() returns a Page; here we read the first page.
-const page = await warmbly.unibox.list({ status: "unread", limit: 25 });
+const page = await warmbly.unibox.list({ unseen: true, limit: 25 });
 console.log("conversations on this page", page.data.length);
 
 // 2. Counts (for example, unread totals) and a higher-level overview summary.
@@ -27,32 +27,44 @@ if (!firstItem) {
 
   // 3. Open the full thread by thread_id.
   const thread = await warmbly.unibox.thread({ thread_id: threadId });
-  console.log("thread", thread);
+  console.log("messages in thread", thread.data.length);
 
   // 4. Replace the labels on the thread (and read them back).
-  await warmbly.unibox.setThreadLabels({ thread_id: threadId, labels: ["lead", "warm"] });
+  await warmbly.unibox.setThreadLabels({ thread_id: threadId, category_ids: ["cat_lead"] });
   const labels = await warmbly.unibox.getThreadLabels({ thread_id: threadId });
   console.log("labels now", labels);
 
   // 5. Mark the conversation as seen.
-  await warmbly.unibox.markSeen({ ids: [conversationId], seen: true });
+  await warmbly.unibox.markSeen({ email_ids: [conversationId], seen: true });
   console.log("marked seen");
 
-  // 6. Reply within the thread.
-  await warmbly.unibox.reply({ thread_id: threadId, body: "Thanks for getting back to me!" });
+  // 6. Reply within the thread. A reply names the sending mailbox, the recipients, and a
+  //    subject, plus the thread to land in.
+  await warmbly.unibox.reply({
+    email_account_id: "mb_1",
+    to: ["jordan@acme.com"],
+    subject: firstItem.subject ?? "Re:",
+    body_plain: "Thanks for getting back to me!",
+    thread_id: threadId,
+  });
   console.log("reply sent");
 
   // 7. Snooze the conversation until a time, then unsnooze it.
-  await warmbly.unibox.snooze({ thread_id: threadId, until: "2026-07-01T09:00:00Z" });
+  await warmbly.unibox.snooze({ thread_id: threadId, snoozed_until: "2026-11-01T09:00:00Z" });
   console.log("snoozed");
   await warmbly.unibox.unsnooze({ thread_id: threadId });
   console.log("unsnoozed");
+
+  // 8. File the conversation away. Archive, Delete and Move to inbox all go through
+  //    moveFolder; sent, drafts and spam are provider verdicts you cannot file into.
+  await warmbly.unibox.moveFolder({ thread_ids: [threadId], folder: "archive" });
+  console.log("archived");
 }
 
-// 8. List scheduled (queued) sends, and cancel the first one by its task id.
+// 9. List scheduled (queued) sends, and cancel the first one by its task id.
 const scheduled = await warmbly.unibox.scheduled();
-console.log("scheduled sends", scheduled);
-const tasks = (scheduled.tasks ?? []) as Array<{ task_id: string }>;
+console.log("scheduled sends", scheduled.data.length);
+const tasks = scheduled.data;
 if (tasks[0]) {
   await warmbly.unibox.cancelScheduled(tasks[0].task_id);
   console.log("cancelled scheduled send", tasks[0].task_id);

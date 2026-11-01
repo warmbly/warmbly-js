@@ -107,6 +107,8 @@ export interface ApiErrorBody {
   message?: string;
   /** Stable machine-readable code, e.g. `"rate_limit_exceeded"`. */
   code?: string;
+  /** An optional finer key under `code`, e.g. `"certificate_untrusted"` on `mailbox_tls_failed`. */
+  reason?: string;
   /** Request id for support and tracing. */
   request_id?: string;
   /**

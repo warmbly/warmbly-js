@@ -202,16 +202,21 @@ describe("Integrations", () => {
   });
 
   it("gets the webhook secret", async () => {
-    const { http, fetchMock } = clientWith({ secret: "whsec_abc" });
+    const body = {
+      signing_secret: "whsec_abc",
+      signature_header: "X-Warmbly-Signature",
+      scheme: 'HMAC-SHA256 of "{t}.{body}", sent as t=<unix>,v1=<hex>',
+    };
+    const { http, fetchMock } = clientWith(body);
     const result = await new Integrations(http).getWebhookSecret("conn_1");
     const { url, init } = lastCall(fetchMock);
     expect(init.method).toBe("GET");
     expect(url).toContain("/integrations/connections/conn_1/webhook-secret");
-    expect(result).toEqual({ secret: "whsec_abc" });
+    expect(result).toEqual(body);
   });
 
   it("tests a connection via POST with the body", async () => {
-    const { http, fetchMock } = clientWith({ ok: true });
+    const { http, fetchMock } = clientWith({ sent: 2 });
     const result = await new Integrations(http).testConnection("conn_1", {
       email: "ops@warmbly.com",
     });
@@ -219,11 +224,11 @@ describe("Integrations", () => {
     expect(init.method).toBe("POST");
     expect(url).toContain("/integrations/connections/conn_1/test");
     expect(JSON.parse(String(init.body))).toEqual({ email: "ops@warmbly.com" });
-    expect(result).toEqual({ ok: true });
+    expect(result).toEqual({ sent: 2 });
   });
 
   it("tests a connection without params", async () => {
-    const { http, fetchMock } = clientWith({ ok: true });
+    const { http, fetchMock } = clientWith({ sent: 0 });
     await new Integrations(http).testConnection("conn_1");
     const { url, init } = lastCall(fetchMock);
     expect(init.method).toBe("POST");
@@ -231,7 +236,13 @@ describe("Integrations", () => {
   });
 
   it("pushes through a connection via POST with the body", async () => {
-    const { http, fetchMock } = clientWith({ pushed: 1 });
+    const body = {
+      provider: "hubspot",
+      pushed: 1,
+      failed: 0,
+      results: [{ contact_id: "c_1", ok: true }],
+    };
+    const { http, fetchMock } = clientWith(body);
     const result = await new Integrations(http).pushConnection("conn_1", {
       contact_ids: ["c_1"],
     });
@@ -239,15 +250,83 @@ describe("Integrations", () => {
     expect(init.method).toBe("POST");
     expect(url).toContain("/integrations/connections/conn_1/push");
     expect(JSON.parse(String(init.body))).toEqual({ contact_ids: ["c_1"] });
-    expect(result).toEqual({ pushed: 1 });
+    expect(result).toEqual(body);
   });
 
-  it("pushes through a connection without params", async () => {
-    const { http, fetchMock } = clientWith({ pushed: 0 });
-    await new Integrations(http).pushConnection("conn_1");
+  it("pushes a select-all selection with the filters in the body", async () => {
+    const { http, fetchMock } = clientWith({
+      provider: "hubspot",
+      pushed: 3,
+      failed: 0,
+      results: [],
+    });
+    await new Integrations(http).pushConnection("conn_1", {
+      all: true,
+      filters: { subscribed: true },
+      exclude: ["c_9"],
+    });
+    expect(JSON.parse(String(lastCall(fetchMock).init.body))).toEqual({
+      all: true,
+      filters: { subscribed: true },
+      exclude: ["c_9"],
+    });
+  });
+
+  it("setSigningKey PUTs signing_key and unwraps the connection", async () => {
+    const { http, fetchMock } = clientWith({
+      connection: { id: "conn_1", provider: "calendly", status: "active" },
+    });
+    const conn = await new Integrations(http).setSigningKey("conn_1", "whsec_12345678");
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("PUT");
+    expect(url).toMatch(/\/integrations\/connections\/conn_1\/signing-key$/);
+    expect(JSON.parse(String(init.body))).toEqual({ signing_key: "whsec_12345678" });
+    expect(conn.provider).toBe("calendly");
+  });
+
+  it("setSigningKey with an empty key sends it so the key is removed", async () => {
+    const { http, fetchMock } = clientWith({ connection: { id: "conn_1" } });
+    await new Integrations(http).setSigningKey("conn_1", "");
+    expect(JSON.parse(String(lastCall(fetchMock).init.body))).toEqual({ signing_key: "" });
+  });
+
+  it("setSigningKey surfaces a 400 for a provider that takes no key", async () => {
+    const { http } = clientWith(
+      { error: "Bad Request", message: "only Calendly and Cal.com connections take a signing key" },
+      { status: 400 },
+    );
+    await expect(new Integrations(http).setSigningKey("conn_1", "x")).rejects.toMatchObject({
+      status: 400,
+    });
+  });
+
+  it("rotateInboundUrl POSTs bodyless and returns the new URL", async () => {
+    const { http, fetchMock } = clientWith({
+      inbound_webhook_url: "https://api.warmbly.com/v1/integrations/inbound/calendly/abc123",
+    });
+    const out = await new Integrations(http).rotateInboundUrl("conn_1");
     const { url, init } = lastCall(fetchMock);
     expect(init.method).toBe("POST");
-    expect(url).toContain("/integrations/connections/conn_1/push");
+    expect(url).toMatch(/\/integrations\/connections\/conn_1\/rotate-inbound-url$/);
+    expect(init.body).toBeUndefined();
+    expect(out.inbound_webhook_url).toContain("/calendly/");
+  });
+
+  it("decodes a connection carrying the inbound URL and health fields", async () => {
+    const { http } = clientWith({
+      id: "conn_1",
+      provider: "cal_com",
+      label: "Cal",
+      status: "active",
+      sync_direction: "pull",
+      health: "ok",
+      health_detail: null,
+      inbound_webhook_url: "https://api.warmbly.com/v1/x",
+      created_at: "2026-10-04T09:00:00Z",
+    });
+    const conn = await new Integrations(http).createConnection({ provider: "cal_com" });
+    expect(conn.inbound_webhook_url).toBe("https://api.warmbly.com/v1/x");
+    expect(conn.health_detail).toBeNull();
   });
 
   it("lists bookings via GET with query", async () => {
@@ -258,5 +337,58 @@ describe("Integrations", () => {
     expect(url).toContain("/integrations/bookings");
     expect(url).toContain("from=2026-06-01");
     expect(result).toEqual({ bookings: [] });
+  });
+});
+
+describe("Integrations community directory", () => {
+  const app = {
+    application_id: "app_1",
+    slug: "acme-sync",
+    name: "Acme Sync",
+    tagline: "Two-way sync with Acme",
+    description: "Keeps Acme and Warmbly in step.",
+    category: "crm",
+    logo_url: "https://cdn.warmbly.com/oauth-app-logos/app_1.png",
+    website_url: "https://acme.example.com",
+    install_url: "https://acme.example.com/install",
+    support_url: "",
+    privacy_url: "https://acme.example.com/privacy",
+    developer: "Acme Inc",
+    scopes: 6,
+    permissions: [
+      { name: "READ_CAMPAIGNS", value: 2, description: "View campaigns", category: "read" },
+      { name: "READ_CONTACTS", value: 4, description: "View contacts", category: "read" },
+    ],
+    status: "featured",
+    listed: true,
+    installs: 12,
+    installed: false,
+    published_at: "2026-09-01T00:00:00Z",
+  };
+
+  it("listCommunityApps returns a Page and passes the cursor and limit", async () => {
+    const { http, fetchMock } = clientWith({
+      data: [app],
+      pagination: { total: 1, next_cursor: null, has_more: false },
+    });
+    const page = await new Integrations(http).listCommunityApps({ limit: 50, cursor: "o:50" });
+    const { url, init } = lastCall(fetchMock);
+    const parsed = new URL(url);
+    expect(init.method).toBe("GET");
+    expect(parsed.pathname).toBe("/v1/integrations/community");
+    expect(parsed.searchParams.get("limit")).toBe("50");
+    expect(parsed.searchParams.get("cursor")).toBe("o:50");
+    expect(page.data[0]?.permissions[1]?.name).toBe("READ_CONTACTS");
+    expect(page.pagination.total).toBe(1);
+  });
+
+  it("getCommunityApp GETs one listing by slug", async () => {
+    const { http, fetchMock } = clientWith(app);
+    const out = await new Integrations(http).getCommunityApp("acme-sync");
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("GET");
+    expect(new URL(url).pathname).toBe("/v1/integrations/community/acme-sync");
+    expect(out.installs).toBe(12);
+    expect(out.status).toBe("featured");
   });
 });

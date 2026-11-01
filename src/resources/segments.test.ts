@@ -109,6 +109,40 @@ describe("Segments", () => {
     expect(out.updated).toBe(2);
   });
 
+  it("setMembers sends the select-all selection with filters and exclude", async () => {
+    const { http, fetchMock } = clientWith({ updated: 480 });
+    const out = await new Segments(http).setMembers("seg1", {
+      all: true,
+      filters: { subscribed: true },
+      exclude: ["c9"],
+      mode: "exclude",
+    });
+    expect(JSON.parse(String(lastCall(fetchMock).init.body))).toEqual({
+      all: true,
+      filters: { subscribed: true },
+      exclude: ["c9"],
+      mode: "exclude",
+    });
+    expect(out.updated).toBe(480);
+  });
+
+  it("fields decodes the mail_host enum with its option labels", async () => {
+    const { http } = clientWith({
+      data: [
+        {
+          field: "mail_host",
+          label: "Email provider",
+          group: "Contact",
+          kind: "enum",
+          options: ["google_workspace", "microsoft365"],
+          option_labels: { google_workspace: "Google Workspace", microsoft365: "Microsoft 365" },
+        },
+      ],
+    });
+    const out = await new Segments(http).fields();
+    expect(out[0]?.option_labels?.microsoft365).toBe("Microsoft 365");
+  });
+
   it("memberModes POSTs /segments/:id/members/lookup and unwraps data", async () => {
     const { http, fetchMock } = clientWith({ data: { c1: "include" } });
     const out = await new Segments(http).memberModes("seg1", ["c1", "c2"]);

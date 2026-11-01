@@ -19,8 +19,10 @@ export interface ApiKey {
   key_suffix: string;
   /** Permission bitmask carried by the key. */
   permissions: number;
-  allowed_ips: string[];
-  allowed_email_accounts: string[];
+  /** Omitted by the server when the key has no IP allowlist. */
+  allowed_ips?: string[];
+  /** Omitted by the server when the key is not restricted to specific mailboxes. */
+  allowed_email_accounts?: string[];
   rate_limit_per_minute: number;
   status: ApiKeyStatus;
   last_used_at?: string | null;
@@ -81,6 +83,13 @@ export interface PermissionCatalog {
     full_access: number;
     [key: string]: unknown;
   };
+  /**
+   * The widest mask the caller may put on a key: a member's role ceiling, or the calling
+   * key's own permissions. Asking for more is a 403 with code `api_key_permissions_exceed_caller`.
+   */
+  grantable?: number;
+  /** Every scope a third-party OAuth app may request (all but `API_KEYS`). */
+  app_scopes?: number;
   [key: string]: unknown;
 }
 
@@ -132,8 +141,11 @@ export interface ApiKeyLogsParams {
 }
 
 /**
- * Manage API keys: create, list, inspect, revoke, and read usage analytics and logs.
- * Reachable as `warmbly.apiKeys`.
+ * Manage API keys: create, list, inspect, revoke, delete, and read usage analytics and logs.
+ * Reachable as `warmbly.apiKeys`. Every method except {@link ApiKeys.revokeSelf} needs the
+ * `API_KEYS` scope. Creating, updating, revoking and deleting keys is refused to an OAuth app
+ * token (403, code `oauth_token_not_allowed`), and a key can never be given more than its
+ * creator holds (403, code `api_key_permissions_exceed_caller`).
  *
  * @example
  * const created = await warmbly.apiKeys.create({
@@ -204,6 +216,19 @@ export class ApiKeys extends APIResource {
     return this.http.delete<{ status: string }>(this.path("api-keys", id), {
       query: reason !== undefined ? { reason } : undefined,
     });
+  }
+
+  /**
+   * Permanently deletes a revoked or expired API key together with its usage logs.
+   * An active key is refused with a 409: revoke it first with {@link ApiKeys.revoke}, so
+   * the audit trail records why it ended. Needs the `API_KEYS` scope.
+   *
+   * @example
+   * await warmbly.apiKeys.revoke("key_123");
+   * const { status } = await warmbly.apiKeys.delete("key_123"); // "deleted"
+   */
+  delete(id: string, opts?: RequestOptions): Promise<{ status: string }> {
+    return this.http.delete<{ status: string }>(this.path("api-keys", id, "permanent"), opts);
   }
 
   /**

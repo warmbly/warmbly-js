@@ -424,3 +424,51 @@ describe("Misc reordering", () => {
     expect(lastCall(fetchMock).url).toContain("/categories/a%2Fb/move");
   });
 });
+
+describe("Misc: audit log shape and deployment config additions", () => {
+  it("auditLogs decodes the server's field names and forwards the filters", async () => {
+    const { http, fetchMock } = clientWith({
+      data: [
+        {
+          id: "al_1",
+          org_id: "org_1",
+          user_id: "u_1",
+          actor: { id: "u_1", email: "sam@warmbly.com" },
+          action_date: "2026-10-04T09:00:00Z",
+          action: "pause",
+          entity_type: "campaign_lead",
+          entity_id: "c_1",
+          ip_address: "203.0.113.4",
+          user_agent: "warmbly-js",
+          metadata: { campaign_id: "camp_1", until: "no end" },
+          timestamp: "2026-10-04T09:00:00Z",
+        },
+      ],
+      pagination: { next_cursor: null, has_more: false },
+    });
+    const page = await new Misc(http).auditLogs({
+      entity_type: "campaign_lead",
+      actor_id: "u_1",
+      start_date: "2026-10-01",
+    });
+    const { url } = lastCall(fetchMock);
+    expect(url).toContain("entity_type=campaign_lead");
+    expect(url).toContain("actor_id=u_1");
+    expect(url).toContain("start_date=2026-10-01");
+    expect(page.data[0]?.entity_type).toBe("campaign_lead");
+    expect(page.data[0]?.metadata?.until).toBe("no end");
+  });
+
+  it("authConfig decodes api_url, gmail_oauth_connect and the brand", async () => {
+    const { http } = clientWith({
+      self_hosted: true,
+      gmail_oauth_connect: false,
+      api_url: "https://mail.example.com/api",
+      brand: { name: "Example Mail", support_email: "help@example.com" },
+    });
+    const out = await new Misc(http).authConfig();
+    expect(out.gmail_oauth_connect).toBe(false);
+    expect(out.api_url).toBe("https://mail.example.com/api");
+    expect(out.brand?.name).toBe("Example Mail");
+  });
+});

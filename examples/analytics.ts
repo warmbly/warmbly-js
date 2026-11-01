@@ -14,8 +14,10 @@ const window = {
   to: "2026-06-15",
 };
 
-// Top-level dashboard: the headline numbers for the whole workspace.
-const dashboard = await warmbly.analytics.dashboard(window);
+// Top-level dashboard: the headline numbers for the workspace over 7d, 30d or 90d. The
+// dashboard has no from/to; pass campaign_ids or folder_ids to narrow it, and the response
+// echoes the filter in `scope`.
+const dashboard = await warmbly.analytics.dashboard({ period: "30d" });
 console.log("dashboard", dashboard);
 
 // Deliverability: inbox placement, bounces, spam complaints, and the like.

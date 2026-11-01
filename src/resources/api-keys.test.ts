@@ -234,3 +234,29 @@ describe("ApiKeys.revokeSelf", () => {
     expect(lastCall(fetchMock).url).toMatch(/\/api-keys\/self$/);
   });
 });
+
+describe("ApiKeys.delete", () => {
+  it("DELETEs /api-keys/:id/permanent and returns the acknowledgement", async () => {
+    const { http, fetchMock } = clientWith({ status: "deleted" });
+    const out = await new ApiKeys(http).delete("k1");
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("DELETE");
+    expect(url).toMatch(/\/api-keys\/k1\/permanent$/);
+    expect(init.body).toBeUndefined();
+    expect(out.status).toBe("deleted");
+  });
+
+  it("surfaces the 409 for a key that is still active", async () => {
+    const { http } = clientWith(
+      { error: "Conflict", message: "this key is still active; revoke it before deleting it" },
+      { status: 409 },
+    );
+    await expect(new ApiKeys(http).delete("k1")).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("decodes a key whose allowlists the server omitted", async () => {
+    const { http } = clientWith({ id: "k1", name: "ci", rate_limit_per_minute: 60 });
+    const key = await new ApiKeys(http).get("k1");
+    expect(key.allowed_ips).toBeUndefined();
+  });
+});

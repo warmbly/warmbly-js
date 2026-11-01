@@ -54,17 +54,17 @@ describe("Unibox", () => {
   });
 
   it("count() GETs unibox/count with a query", async () => {
-    const { http, fetchMock } = clientWith({ unread: 3 });
-    const result = await new Unibox(http).count({ status: "unread" });
-    expect(result).toEqual({ unread: 3 });
+    const { http, fetchMock } = clientWith({ count: 3 });
+    const result = await new Unibox(http).count({ email_id: "mb_1" });
+    expect(result).toEqual({ count: 3 });
     const { url, init } = lastCall(fetchMock);
     expect(init.method).toBe("GET");
     expect(url).toContain("/unibox/count");
-    expect(url).toContain("status=unread");
+    expect(url).toContain("email_id=mb_1");
   });
 
   it("count() works with no params", async () => {
-    const { http, fetchMock } = clientWith({ unread: 0 });
+    const { http, fetchMock } = clientWith({ count: 0 });
     await new Unibox(http).count();
     const { url, init } = lastCall(fetchMock);
     expect(init.method).toBe("GET");
@@ -72,13 +72,26 @@ describe("Unibox", () => {
   });
 
   it("overview() GETs unibox/overview with a query", async () => {
-    const { http, fetchMock } = clientWith({ total: 42 });
-    const result = await new Unibox(http).overview({ window: "7d" });
-    expect(result).toEqual({ total: 42 });
+    const { http, fetchMock } = clientWith({
+      total: 42,
+      unread: 5,
+      today: 2,
+      week: 9,
+      snoozed: 1,
+      awaiting_reply: 3,
+      automated: 7,
+      automated_unread: 4,
+      scheduled_pending: 1,
+      scheduled_pending_max: 100,
+      folders: [{ folder: "inbox", unread: 5, total: 30 }],
+      generated_at: "2026-10-04T09:00:00Z",
+    });
+    const result = await new Unibox(http).overview();
+    expect(result.automated_unread).toBe(4);
+    expect(result.folders?.[0]?.folder).toBe("inbox");
     const { url, init } = lastCall(fetchMock);
     expect(init.method).toBe("GET");
     expect(url).toContain("/unibox/overview");
-    expect(url).toContain("window=7d");
   });
 
   it("overview() works with no params", async () => {
@@ -89,28 +102,61 @@ describe("Unibox", () => {
   });
 
   it("get() GETs a single conversation by id", async () => {
-    const { http, fetchMock } = clientWith({ id: "ub_1", from: "lead@warmbly.com" });
+    const { http, fetchMock } = clientWith({
+      id: "ub_1",
+      email_id: "mb_1",
+      folder: "inbox",
+      thread_id: "t_1",
+      from: ["lead@warmbly.com"],
+      to: ["sam@warmbly.com"],
+      subject: "Re: Hello",
+      body_plain: "Sounds good",
+    });
     const item = await new Unibox(http).get("ub_1");
     expect(item.id).toBe("ub_1");
+    expect(item.from).toEqual(["lead@warmbly.com"]);
     const { url, init } = lastCall(fetchMock);
     expect(init.method).toBe("GET");
     expect(url).toContain("/unibox/ub_1");
   });
 
   it("thread() GETs unibox/thread with the thread_id query", async () => {
-    const { http, fetchMock } = clientWith({ thread_id: "t_1", messages: [] });
-    const result = await new Unibox(http).thread({ thread_id: "t_1" });
-    expect(result).toEqual({ thread_id: "t_1", messages: [] });
+    const { http, fetchMock } = clientWith({
+      data: [
+        {
+          id: "ub_1",
+          email_id: "mb_1",
+          thread_id: "t_1",
+          from_addr: ["lead@warmbly.com"],
+          to_addr: ["sam@warmbly.com"],
+          subject: "Hello",
+          snippet: "Hi Sam",
+          internal_date: "2026-10-04T09:00:00Z",
+          seen: false,
+          message_count: 0,
+          has_unread: false,
+          labels: [],
+          answers_mailbox_id: "mb_2",
+        },
+      ],
+      pagination: { next_cursor: null, has_more: false },
+    });
+    const result = await new Unibox(http).thread({ thread_id: "t_1", limit: 20 });
+    expect(result.data[0]?.answers_mailbox_id).toBe("mb_2");
+    expect(result.data[0]?.from_addr).toEqual(["lead@warmbly.com"]);
     const { url, init } = lastCall(fetchMock);
     expect(init.method).toBe("GET");
     expect(url).toContain("/unibox/thread");
     expect(url).toContain("thread_id=t_1");
+    expect(url).toContain("limit=20");
   });
 
   it("getThreadLabels() GETs unibox/thread/labels with a query", async () => {
-    const { http, fetchMock } = clientWith({ labels: ["lead"] });
+    const { http, fetchMock } = clientWith({
+      data: [{ id: "cat_1", title: "Lead", color: "#22c55e" }],
+    });
     const result = await new Unibox(http).getThreadLabels({ thread_id: "t_1" });
-    expect(result).toEqual({ labels: ["lead"] });
+    expect(result).toEqual([{ id: "cat_1", title: "Lead", color: "#22c55e" }]);
     const { url, init } = lastCall(fetchMock);
     expect(init.method).toBe("GET");
     expect(url).toContain("/unibox/thread/labels");
@@ -118,39 +164,72 @@ describe("Unibox", () => {
   });
 
   it("setThreadLabels() PUTs unibox/thread/labels with a JSON body", async () => {
-    const { http, fetchMock } = clientWith({ labels: ["lead"] });
-    await new Unibox(http).setThreadLabels({ thread_id: "t_1", labels: ["lead"] });
+    const { http, fetchMock } = clientWith({
+      data: [{ id: "cat_1", title: "Lead", color: "#22c55e" }],
+    });
+    const labels = await new Unibox(http).setThreadLabels({
+      thread_id: "t_1",
+      category_ids: ["cat_1"],
+    });
     const { url, init } = lastCall(fetchMock);
     expect(init.method).toBe("PUT");
     expect(url).toContain("/unibox/thread/labels");
-    expect(JSON.parse(String(init.body))).toEqual({ thread_id: "t_1", labels: ["lead"] });
+    expect(JSON.parse(String(init.body))).toEqual({ thread_id: "t_1", category_ids: ["cat_1"] });
+    expect(labels[0]?.id).toBe("cat_1");
   });
 
   it("markSeen() PATCHes unibox/seen with a JSON body", async () => {
-    const { http, fetchMock } = clientWith({ updated: 1 });
-    await new Unibox(http).markSeen({ ids: ["ub_1"], seen: true });
+    const { http, fetchMock } = clientWith({
+      email_ids: ["ub_1"],
+      thread_ids: ["t_1"],
+      seen: true,
+    });
+    await new Unibox(http).markSeen({ email_ids: ["ub_1"], thread_ids: ["t_1"], seen: true });
     const { url, init } = lastCall(fetchMock);
     expect(init.method).toBe("PATCH");
     expect(url).toContain("/unibox/seen");
-    expect(JSON.parse(String(init.body))).toEqual({ ids: ["ub_1"], seen: true });
+    expect(JSON.parse(String(init.body))).toEqual({
+      email_ids: ["ub_1"],
+      thread_ids: ["t_1"],
+      seen: true,
+    });
   });
 
   it("reply() POSTs unibox/reply with a JSON body", async () => {
-    const { http, fetchMock } = clientWith({ sent: true });
-    await new Unibox(http).reply({ thread_id: "t_1", body: "Thanks!" });
+    const { http, fetchMock } = clientWith({ task_id: "task_1" });
+    const params = {
+      email_account_id: "mb_1",
+      to: ["jordan@acme.com"],
+      subject: "Re: Hello",
+      body_plain: "Thanks!",
+      thread_id: "t_1",
+      forward_message_id: "ub_9",
+    };
+    await new Unibox(http).reply(params);
     const { url, init } = lastCall(fetchMock);
     expect(init.method).toBe("POST");
     expect(url).toContain("/unibox/reply");
-    expect(JSON.parse(String(init.body))).toEqual({ thread_id: "t_1", body: "Thanks!" });
+    expect(JSON.parse(String(init.body))).toEqual(params);
   });
 
   it("listSnoozes() GETs unibox/snoozes with a query", async () => {
-    const { http, fetchMock } = clientWith({ data: [] });
-    await new Unibox(http).listSnoozes({ status: "active" });
+    const { http, fetchMock } = clientWith({
+      data: [
+        {
+          id: "sn_1",
+          user_id: "u_1",
+          thread_id: "t_1",
+          snoozed_until: "2026-11-01T09:00:00Z",
+          created_at: "2026-10-04T09:00:00Z",
+          updated_at: "2026-10-04T09:00:00Z",
+        },
+      ],
+    });
+    const out = await new Unibox(http).listSnoozes();
     const { url, init } = lastCall(fetchMock);
     expect(init.method).toBe("GET");
     expect(url).toContain("/unibox/snoozes");
-    expect(url).toContain("status=active");
+    expect(out.data[0]?.thread_id).toBe("t_1");
   });
 
   it("listSnoozes() works with no params", async () => {
@@ -161,35 +240,73 @@ describe("Unibox", () => {
   });
 
   it("snooze() POSTs unibox/snooze with a JSON body", async () => {
-    const { http, fetchMock } = clientWith({ snoozed: true });
-    await new Unibox(http).snooze({ thread_id: "t_1", until: "2026-07-01T09:00:00Z" });
+    const { http, fetchMock } = clientWith({
+      id: "sn_1",
+      thread_id: "t_1",
+      snoozed_until: "2026-11-01T09:00:00Z",
+    });
+    const out = await new Unibox(http).snooze({
+      thread_id: "t_1",
+      snoozed_until: "2026-11-01T09:00:00Z",
+    });
     const { url, init } = lastCall(fetchMock);
     expect(init.method).toBe("POST");
     expect(url).toContain("/unibox/snooze");
     expect(JSON.parse(String(init.body))).toEqual({
       thread_id: "t_1",
-      until: "2026-07-01T09:00:00Z",
+      snoozed_until: "2026-11-01T09:00:00Z",
     });
+    expect("thread_id" in out && out.thread_id).toBe("t_1");
+  });
+
+  it("snooze() with several threads answers with a data envelope", async () => {
+    const { http, fetchMock } = clientWith({
+      data: [
+        { id: "sn_1", thread_id: "t_1", snoozed_until: "2026-11-01T09:00:00Z" },
+        { id: "sn_2", thread_id: "t_2", snoozed_until: "2026-11-01T09:00:00Z" },
+      ],
+    });
+    const out = await new Unibox(http).snooze({
+      thread_ids: ["t_1", "t_2"],
+      snoozed_until: "2026-11-01T09:00:00Z",
+    });
+    expect(JSON.parse(String(lastCall(fetchMock).init.body)).thread_ids).toEqual(["t_1", "t_2"]);
+    expect("data" in out && out.data).toHaveLength(2);
   });
 
   it("unsnooze() DELETEs unibox/snooze with thread_id in the query string, not the body", async () => {
-    const { http, fetchMock } = clientWith({ snoozed: false });
-    await new Unibox(http).unsnooze({ thread_id: "t_1" });
+    const { http, fetchMock } = clientWith(undefined, { status: 204 });
+    await expect(new Unibox(http).unsnooze({ thread_id: "t_1,t_2" })).resolves.toBeUndefined();
     const { url, init } = lastCall(fetchMock);
     expect(init.method).toBe("DELETE");
     expect(url).toContain("/unibox/snooze");
-    expect(url).toContain("thread_id=t_1");
+    expect(url).toContain("thread_id=t_1%2Ct_2");
     expect(init.body).toBeUndefined();
   });
 
   it("scheduled() GETs unibox/scheduled with a query", async () => {
-    const { http, fetchMock } = clientWith({ data: [{ task_id: "task_1" }] });
-    const result = await new Unibox(http).scheduled({ limit: 5 });
-    expect(result).toEqual({ data: [{ task_id: "task_1" }] });
+    const { http, fetchMock } = clientWith({
+      data: [
+        {
+          task_id: "task_1",
+          scheduled_at: "2026-10-05T09:00:00Z",
+          created_at: "2026-10-04T09:00:00Z",
+          account_id: "mb_1",
+          account_email: "sam@warmbly.com",
+          account_name: "Sam",
+          to: ["jordan@acme.com"],
+          subject: "Re: Hello",
+          snippet: "Thanks",
+          thread_id: "t_1",
+        },
+      ],
+    });
+    const result = await new Unibox(http).scheduled({ thread_id: "t_1" });
+    expect(result.data[0]?.account_email).toBe("sam@warmbly.com");
     const { url, init } = lastCall(fetchMock);
     expect(init.method).toBe("GET");
     expect(url).toContain("/unibox/scheduled");
-    expect(url).toContain("limit=5");
+    expect(url).toContain("thread_id=t_1");
   });
 
   it("scheduled() works with no params", async () => {
@@ -353,5 +470,58 @@ describe("Unibox", () => {
     const { url, init } = lastCall(fetchMock);
     expect(init.method).toBe("POST");
     expect(url).toContain("/unibox/agent-drafts/ad_1/discard");
+  });
+});
+
+describe("Unibox: folder filing and list filters", () => {
+  it("moveFolder PATCHes /unibox/folder with the destination and decodes the echo", async () => {
+    const { http, fetchMock } = clientWith({
+      email_ids: null,
+      thread_ids: ["t_1", "t_2"],
+      folder: "archive",
+    });
+    const out = await new Unibox(http).moveFolder({
+      thread_ids: ["t_1", "t_2"],
+      folder: "archive",
+    });
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("PATCH");
+    expect(url).toMatch(/\/unibox\/folder$/);
+    expect(JSON.parse(String(init.body))).toEqual({
+      thread_ids: ["t_1", "t_2"],
+      folder: "archive",
+    });
+    expect(out.email_ids).toBeNull();
+    expect(out.folder).toBe("archive");
+  });
+
+  it("moveFolder surfaces a 400 for a folder a user cannot file into", async () => {
+    const { http } = clientWith(
+      { error: "Bad Request", message: "folder must be inbox, archive or trash" },
+      { status: 400 },
+    );
+    await expect(
+      new Unibox(http).moveFolder({ email_ids: ["ub_1"], folder: "spam" as never }),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("list forwards the automated, include_archived and category filters", async () => {
+    const { http, fetchMock } = clientWith({
+      data: [],
+      pagination: { next_cursor: null, has_more: false },
+    });
+    await new Unibox(http).list({
+      automated: false,
+      include_archived: true,
+      uncategorized: true,
+      category_ids: "cat_1,cat_2",
+      unseen: true,
+    });
+    const { url } = lastCall(fetchMock);
+    expect(url).toContain("automated=false");
+    expect(url).toContain("include_archived=true");
+    expect(url).toContain("uncategorized=true");
+    expect(url).toContain("category_ids=cat_1%2Ccat_2");
+    expect(url).toContain("unseen=true");
   });
 });

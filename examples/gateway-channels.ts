@@ -38,7 +38,7 @@ gw.on("ACCOUNT_ERROR", (e) => console.log("account error:", e.account_id));
 gw.on("ACCOUNT_SYNCED", (e) => console.log("account synced:", e.account_id));
 gw.on("ACCOUNT_HEALTH_CHANGED", (e) => console.log("account health changed:", e.account_id));
 // A mailbox's import finished, or fair use started/stopped holding it.
-gw.on("ACCOUNT_SYNC_STATE", (e) => console.log("account sync:", e.account_id, e.status, e.reason));
+gw.on("ACCOUNT_SYNC_STATE", (e) => console.log("account sync:", e.email_account_id, e.status, e.reason));
 
 // Campaign lifecycle.
 gw.on("CAMPAIGN_STARTED", (e) => console.log("campaign started:", e.campaign_id));

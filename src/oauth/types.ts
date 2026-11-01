@@ -240,11 +240,75 @@ export interface OAuthApplication {
   scopes: number;
   /** Lifecycle status. */
   status: string;
+  /**
+   * Set while the instance's operators have suspended the app. The owner cannot lift it, and
+   * edits and logo changes are refused (409, code `app_suspended`).
+   */
+  suspended_at?: string;
+  /** The operators' reason for the suspension. */
+  suspended_reason?: string;
   /** ISO-8601 creation timestamp. */
   created_at: string;
   /** ISO-8601 last-update timestamp. */
   updated_at: string;
   /** Forward-compatible: additional fields. */
+  [key: string]: unknown;
+}
+
+/**
+ * Whether the workspace and caller may register and publish OAuth apps right now. A blocked
+ * developer is refused with code `developer_access_blocked`.
+ */
+export interface OAuthDeveloperAccess {
+  blocked: boolean;
+  /** The operators' reason, when blocked. */
+  reason?: string;
+  [key: string]: unknown;
+}
+
+/** Where a community directory listing can be seen. */
+export type OAuthAppListingStatus = "published" | "featured" | "hidden" | (string & {});
+
+/** An OAuth app's page in the community directory. */
+export interface OAuthAppListing {
+  application_id: string;
+  organization_id: string;
+  /** The listing's link: 3 to 48 lowercase letters, numbers or single dashes. */
+  slug: string;
+  tagline: string;
+  description: string;
+  category: string;
+  install_url: string;
+  support_url: string;
+  privacy_url: string;
+  /** `published` is reachable by its link; `featured` and widely used apps are listed; `hidden` is taken down. */
+  status: OAuthAppListingStatus;
+  /** The operators' note, such as why it was hidden. */
+  status_note?: string;
+  status_at?: string;
+  submitted_at: string;
+  created_at: string;
+  updated_at: string;
+  [key: string]: unknown;
+}
+
+/**
+ * The publish/edit body for an app's listing. A field breaking a rule is a 400 with code
+ * `invalid_listing`; a taken slug is a 409 with code `listing_slug_taken`.
+ */
+export interface OAuthAppListingWrite {
+  slug: string;
+  /** Up to 120 characters. */
+  tagline: string;
+  /** Up to 2,000 characters. */
+  description?: string;
+  /** `crm`, `automation`, `notifications`, `meetings`, `data`, `verification`, `ai` or `other`. */
+  category: string;
+  /** Where a workspace starts installing the app. Required, `https`. */
+  install_url: string;
+  /** Optional `https` addresses. */
+  support_url?: string;
+  privacy_url?: string;
   [key: string]: unknown;
 }
 

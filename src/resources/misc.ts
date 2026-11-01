@@ -6,6 +6,10 @@ import { APIResource } from "./base";
 export interface Folder {
   id: string;
   title?: string;
+  color?: string;
+  position?: number;
+  created_at?: string;
+  updated_at?: string;
   [key: string]: unknown;
 }
 
@@ -13,13 +17,21 @@ export interface Folder {
 export interface Tag {
   id: string;
   title?: string;
+  color?: string;
+  position?: number;
+  created_at?: string;
+  updated_at?: string;
   [key: string]: unknown;
 }
 
-/** A category. Documented-but-open shape. */
+/** A category (conversation and contact label). Documented-but-open shape. */
 export interface Category {
   id: string;
   title?: string;
+  color?: string;
+  position?: number;
+  created_at?: string;
+  updated_at?: string;
   [key: string]: unknown;
 }
 
@@ -36,20 +48,65 @@ export interface GroupOrder {
 /** A team. Documented-but-open shape. */
 export interface Team {
   id: string;
+  organization_id?: string;
   name?: string;
+  color?: string;
+  /** Always an array, never null. */
   members?: unknown[];
   created_at?: string;
+  updated_at?: string;
   [key: string]: unknown;
 }
 
 /** An audit log entry. */
 export interface AuditLogEntry {
   id?: string;
+  org_id?: string;
+  /** The actor's id. */
+  user_id?: string;
+  /** The actor, when the member is known. */
+  actor?: { [key: string]: unknown };
+  /** When the action happened. */
+  action_date?: string;
+  /** For example `create`, `update`, `delete`, `send`, `pause`, `resume`. */
   action?: string;
+  /**
+   * What the action touched, for example `campaign`, `campaign_lead`, `email_account`,
+   * `email_image`, `placement_test`, `placement_monitor`, `placement_batch`.
+   */
+  entity_type?: string;
+  entity_id?: string;
+  ip_address?: string;
+  user_agent?: string;
+  changes?: Record<string, string>;
+  metadata?: Record<string, string>;
+  timestamp?: string;
+  /** @deprecated The server has no `actor_id`; the actor is `user_id`. */
   actor_id?: string;
+  /** @deprecated The server names it `entity_type`. */
   resource_type?: string;
+  /** @deprecated The server names it `entity_id`. */
   resource_id?: string;
+  /** @deprecated The server names it `action_date` and `timestamp`. */
   created_at?: string;
+  [key: string]: unknown;
+}
+
+/** Query params for {@link Misc.auditLogs}. */
+export interface ListAuditLogsParams {
+  cursor?: string;
+  limit?: number;
+  /** Filter to one actor (user id). */
+  actor_id?: string;
+  entity_id?: string;
+  entity_type?: string;
+  action?: string;
+  /** A single day, `YYYY-MM-DD`. */
+  date?: string;
+  /** RFC 3339 or `YYYY-MM-DD`; overrides the single-day bounds. */
+  start_date?: string;
+  /** RFC 3339 or `YYYY-MM-DD`; overrides the single-day bounds. */
+  end_date?: string;
   [key: string]: unknown;
 }
 
@@ -112,6 +169,20 @@ export interface AuthConfig {
   websocket_url?: string;
   /** The dashboard origin a client sends someone to. Omitted when the instance has none. */
   app_url?: string;
+  /** This API's own public base, taken from the request. Omitted when it cannot be determined. */
+  api_url?: string;
+  /** Whether a new Gmail mailbox may be connected with Google sign-in. */
+  gmail_oauth_connect?: boolean;
+  /** What this deployment calls itself. Every field is empty on a self-host with no brand configured. */
+  brand?: {
+    name: string;
+    website_url?: string;
+    website_label?: string;
+    terms_url?: string;
+    privacy_url?: string;
+    support_email?: string;
+    [key: string]: unknown;
+  };
   [key: string]: unknown;
 }
 
@@ -321,7 +392,7 @@ export class Misc extends APIResource {
    * @example
    * for await (const entry of await warmbly.misc.auditLogs()) console.log(entry.action);
    */
-  auditLogs(params?: Record<string, unknown>): Promise<Page<AuditLogEntry>> {
+  auditLogs(params?: ListAuditLogsParams): Promise<Page<AuditLogEntry>> {
     return this.http.getPage<AuditLogEntry>("audit-logs", { query: params });
   }
 

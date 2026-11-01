@@ -92,13 +92,24 @@ export interface SegmentField {
   kind?: SegmentFieldKind;
   /** The allowed values, for `enum` fields. */
   options?: string[];
+  /** Display names for an enum's values where the value alone is not readable. A value missing here shows as itself. */
+  option_labels?: Record<string, string>;
   [key: string]: unknown;
 }
 
-/** Body for {@link Segments.setMembers}. */
+/**
+ * Body for {@link Segments.setMembers}. Name the contacts by `contacts` id list, or by
+ * `all` plus `filters` and `exclude` (the "select all matching" form).
+ */
 export interface SetSegmentMembersParams {
-  /** Contact ids, up to 1000 per call. Ids outside the organization are ignored. */
-  contacts: string[];
+  /** Contact ids, up to 10,000 per call. Ids outside the organization are ignored. */
+  contacts?: string[];
+  /** Switches the selection from `contacts` to `filters`. Up to 250,000 contacts. */
+  all?: boolean;
+  /** The same body `contacts.search` takes. */
+  filters?: Record<string, unknown>;
+  /** Ids dropped from the resolved set. Ignored unless `all` is true. */
+  exclude?: string[];
   mode: SegmentMemberMode;
   [key: string]: unknown;
 }
@@ -213,7 +224,8 @@ export class Segments extends APIResource {
 
   /**
    * Pins contacts into (`include`) or out of (`exclude`) the segment, or clears their
-   * override (`auto`). Up to 1000 ids per call. Returns how many rows changed.
+   * override (`auto`). Up to 10,000 ids per call, or a select-all by filter. Returns how many
+   * rows changed.
    * @example
    * await warmbly.segments.setMembers("seg_1", { contacts: ["c_1"], mode: "include" });
    */

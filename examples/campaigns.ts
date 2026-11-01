@@ -36,8 +36,10 @@ console.log("existing steps", steps.length);
 const step = await warmbly.campaigns.createStep(campaign.id);
 await warmbly.campaigns.updateStep(campaign.id, step.id, {
   subject: "Following up",
-  body: "Hi {{first_name}}, just circling back.",
-  delay_days: 3,
+  body_plain: "Hi {{first_name}}, just circling back.",
+  wait_after: 3,
+  // Reply in the thread the first email started (the default) instead of opening a new one.
+  thread_reply: true,
 });
 console.log("added step", step.id, "at position", step.position);
 
@@ -51,7 +53,29 @@ console.log("campaign started");
 await warmbly.campaigns.stop(campaign.id);
 console.log("campaign stopped");
 
-// 8. Read the campaign logs. logs() is also a Page; iterate to walk every entry.
+// 8. See what the campaign will send today and which limit decided it.
+const plan = await warmbly.campaigns.sendPlan(campaign.id);
+console.log("projected today", plan.projected_today, "bottleneck", plan.bottleneck || "none");
+for (const limit of plan.limits) console.log("  limit", limit.kind, "removed", limit.emails);
+
+// 9. Park one lead's flow until a date (they stay subscribed), copy a colleague on it,
+//    then lift the hold.
+const leadId = "c_1";
+await warmbly.campaigns.pauseLead(campaign.id, leadId, { until: "2026-11-01T00:00:00Z" });
+console.log((await warmbly.campaigns.getLeadHold(campaign.id, leadId)).hold?.source);
+const { cc } = await warmbly.campaigns.setLeadCC(campaign.id, leadId, ["c_2"]);
+console.log("copying", cc.map((c) => c.email));
+await warmbly.campaigns.resumeLead(campaign.id, leadId);
+
+// 10. Re-test inbox placement every week and pause the campaign if it drops.
+const monitor = await warmbly.campaigns.putPlacementMonitor(campaign.id, {
+  interval_days: 7,
+  alert_below: 80,
+  pause_on_alert: true,
+});
+console.log("next placement test", monitor.next_run_at);
+
+// 11. Read the campaign logs. logs() is also a Page; iterate to walk every entry.
 const logsPage = await warmbly.campaigns.logs(campaign.id, { limit: 50 });
 for (const entry of logsPage.data) {
   console.log("log", entry);

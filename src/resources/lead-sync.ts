@@ -50,6 +50,11 @@ export interface LeadSyncSource {
   /** Add synced contacts to this campaign. */
   target_campaign_id?: string | null;
   category_ids?: string[];
+  /**
+   * Segments every synced row is pinned into as an include override. A segment deleted
+   * later is dropped from the run rather than failing it.
+   */
+  segment_ids?: string[];
   subscribed_default?: boolean;
   label?: string;
   status?: LeadSyncStatus;
@@ -73,13 +78,21 @@ export interface CreateLeadSyncSourceParams {
   dedup?: ImportDedupStrategy;
   target_campaign_id?: string | null;
   category_ids?: string[];
+  /** Segments to pin every synced row into. */
+  segment_ids?: string[];
   subscribed_default?: boolean;
   label?: string;
   [key: string]: unknown;
 }
 
 /** Body for {@link LeadSync.updateSource}. Every field is optional. */
-export type UpdateLeadSyncSourceParams = Partial<CreateLeadSyncSourceParams>;
+export type UpdateLeadSyncSourceParams = Partial<CreateLeadSyncSourceParams> & {
+  /**
+   * Detach the source from its target campaign. `target_campaign_id: null` does not: a
+   * null (or absent) value leaves the stored campaign untouched.
+   */
+  clear_campaign?: boolean;
+};
 
 /** Whether a Google account is connected for lead sync, and which one. */
 export interface LeadSyncConnection {
@@ -154,11 +167,16 @@ export class LeadSync extends APIResource {
   }
 
   /**
-   * Lists the saved sync sources.
+   * Lists the saved sync sources, optionally narrowed to one campaign (`campaign_id`) or
+   * one segment (`segment_id`).
    * @example
-   * const sources = await warmbly.leadSync.listSources();
+   * const sources = await warmbly.leadSync.listSources({ segment_id: "seg_1" });
    */
-  listSources(params?: Record<string, unknown>): Promise<LeadSyncSource[]> {
+  listSources(params?: {
+    campaign_id?: string;
+    segment_id?: string;
+    [key: string]: unknown;
+  }): Promise<LeadSyncSource[]> {
     return this.http
       .get<{ data: LeadSyncSource[] }>("lead-sync/sources", { query: params })
       .then((r) => r.data ?? []);

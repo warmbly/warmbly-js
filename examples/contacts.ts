@@ -21,8 +21,10 @@ for await (const c of results) {
   console.log("match", c.id, c.email);
 }
 
-// 3. Look up a single contact by email.
-const found = await warmbly.contacts.lookup({ email: "jordan@warmbly.com" });
+// 3. Look up a single contact by email. An unknown sender is a 200 with `contact: null`,
+//    not a 404, so check before using it.
+const { contact: found } = await warmbly.contacts.lookup({ email: "jordan@warmbly.com" });
+if (!found) throw new Error("no contact with that address");
 console.log("looked up", found.id, found.first_name);
 
 // 4. Get that contact by id and update a field.
@@ -40,13 +42,36 @@ console.log("timeline", timeline);
 const activities = await warmbly.contacts.activities(contact.id);
 console.log("activities", activities);
 
-// 7. Bulk update many contacts at once (filter selects, set applies the change).
+// 7. Bulk update many contacts at once. The selection is either an id list or a filter
+//    ("select all matching") minus the ids you unticked; `fields` edits custom fields.
 await warmbly.contacts.bulkUpdate({
-  filter: { company: "Acme Inc" },
-  set: { custom_fields: { segment: "enterprise" } },
+  all: true,
+  filters: { query: "Acme Inc" },
+  fields: [{ type: "ADD", key: "segment", value: "enterprise" }],
 });
 console.log("bulk update done");
 
-// 8. Kick off an export job (returns a job descriptor you can poll elsewhere).
-const job = await warmbly.contacts.export({ format: "csv" });
-console.log("export started", job);
+// 8. Export contacts. The response is the file itself: CSV text here (capped at 50,000 rows).
+const csv = await warmbly.contacts.export({ format: "csv", scope: "all" });
+console.log("exported", typeof csv === "string" ? csv.split("\n").length - 1 : 0, "rows");
+
+// 9. Import a file in the background: upload it as a draft, check what it would do under
+//    your mapping, then start it. (Node 20+ has global Blob.)
+const draft = await warmbly.contacts.createImport(
+  new Blob(["email,first_name\njordan@warmbly.com,Jordan\n"], { type: "text/csv" }),
+  { filename: "leads.csv" },
+);
+const options = {
+  mapping: draft.preview?.suggested_mapping ?? [{ index: 0, target: "email" }],
+  has_header: true,
+  dedup: "update" as const,
+};
+const analysis = await warmbly.contacts.analyzeImport(draft.id, {
+  mapping: options.mapping,
+  has_header: true,
+});
+console.log("would create", analysis.new, "and update", analysis.existing);
+if (!analysis.problem) {
+  const started = await warmbly.contacts.startImport(draft.id, options);
+  console.log("import", started.id, started.status);
+}

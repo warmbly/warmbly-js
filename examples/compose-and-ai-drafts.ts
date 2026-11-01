@@ -82,7 +82,7 @@ if (pending[1]) {
 }
 
 // 7. Reply drafting works the same way on an existing thread.
-const inbox = await warmbly.unibox.list({ status: "unread", limit: 1 });
+const inbox = await warmbly.unibox.list({ unseen: true, limit: 1 });
 const thread = inbox.data[0];
 if (thread) {
   const threadId = thread.thread_id ?? thread.id;
@@ -90,8 +90,15 @@ if (thread) {
     thread_id: threadId,
     instruction: "decline politely and suggest revisiting next quarter",
   });
-  if (reply.text) {
-    await warmbly.unibox.reply({ thread_id: threadId, body: reply.text });
+  if (reply.text && thread.email_id) {
+    const subject = thread.subject ?? "";
+    await warmbly.unibox.reply({
+      email_account_id: thread.email_id,
+      to: thread.from_addr ?? [],
+      subject: /^re:/i.test(subject) ? subject : `Re: ${subject}`,
+      body_plain: reply.text,
+      thread_id: threadId,
+    });
     console.log("replied using the draft");
   }
 }
