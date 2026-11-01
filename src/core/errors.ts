@@ -190,6 +190,7 @@ export type ErrorCode =
   | "salesforce_sync_off"
   | "salesforce_unreachable"
   | "tracking_domain_taken"
+  | "forms_domain_taken"
   // Selected-resource member scope: a restricted member, and any key or app acting for
   // one, reaches only the read routes that filter to their grants.
   | "member_access_restricted"

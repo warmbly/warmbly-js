@@ -192,6 +192,10 @@ export interface FormsDomainStatus {
   forms_domain_verified_at?: string | null;
   /** The value to put in the `CNAME`. */
   cname_target?: string;
+  /** The ownership `TXT` record a new verification needs beside the `CNAME`. */
+  txt_name?: string;
+  txt_value?: string;
+  /** For example `verified`, `not_found`, `wrong_target` or `proof_missing` (the `TXT` record is absent). */
   status?: string;
   message?: string;
   [key: string]: unknown;

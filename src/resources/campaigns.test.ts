@@ -737,7 +737,8 @@ describe("Campaigns: estimate and step additions", () => {
       full_capacity_at: null,
       ramping: 1,
       held: 0,
-      warmup: { mailboxes: 2, per_day: 20 },
+      warmup: { mailboxes: 2, per_day: 20, per_day_without: 30, reply_rate: 25 },
+      scenarios: [{ kind: "more_mailboxes", value: 2, finish_at: null }],
       other_campaigns_per_day: 10,
       bottleneck: "warmup_graduation",
       timeline: [
@@ -760,6 +761,7 @@ describe("Campaigns: estimate and step additions", () => {
           first_day_cap: 20,
           steady_cap: 40,
           warmup_per_day: 10,
+          warmup_without: 15,
           full_cap_at: "2026-10-10T00:00:00Z",
         },
       ],
@@ -778,6 +780,9 @@ describe("Campaigns: estimate and step additions", () => {
       start_time: "09:00",
       end_time: "17:00",
     });
+    expect(out.warmup?.per_day_without).toBe(30);
+    expect(out.scenarios?.[0]?.kind).toBe("more_mailboxes");
+    expect(out.senders?.[0]?.warmup_without).toBe(15);
     expect(out.bottleneck).toBe("warmup_graduation");
     expect(out.timeline?.[0]?.first_emails).toBe(60);
     expect(out.senders?.[0]?.full_cap_at).toBe("2026-10-10T00:00:00Z");

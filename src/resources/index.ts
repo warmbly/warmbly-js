@@ -94,6 +94,7 @@ export type {
   CampaignEstimate,
   CampaignEstimateBottleneck,
   CampaignEstimateDay,
+  CampaignEstimateScenario,
   CampaignEstimateSender,
   CampaignFormStats,
   CampaignKind,

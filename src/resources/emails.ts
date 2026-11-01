@@ -230,6 +230,7 @@ export type TrackingDomainVerification =
   | "no_target"
   | "not_found"
   | "wrong_target"
+  | "proof_missing"
   | "lookup_error"
   | "pending"
   | (string & {});
@@ -241,6 +242,9 @@ export interface TrackingDomainStatus {
   tracking_domain_verified_at?: string | null;
   /** The value to put in the `CNAME`. Empty when the deployment has no tracking host. */
   cname_target?: string;
+  /** The ownership `TXT` record a new verification needs beside the `CNAME`. */
+  txt_name?: string;
+  txt_value?: string;
   status?: TrackingDomainVerification;
   /** One sentence explaining `status`, safe to show to an end user. */
   message?: string;

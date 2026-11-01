@@ -117,6 +117,8 @@ export interface UniboxOverview {
   automated?: number;
   automated_unread?: number;
   awaiting_agent_draft?: number;
+  /** Visible threads with a draft, counting each once across mailbox and pending agent drafts. */
+  drafts?: number;
   scheduled_pending?: number;
   /** The cap on pending scheduled sends per workspace. */
   scheduled_pending_max?: number;

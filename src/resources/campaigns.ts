@@ -290,7 +290,15 @@ export interface CampaignEstimate {
   ramping?: number;
   /** Mailboxes contributing nothing today. */
   held?: number;
-  warmup?: { mailboxes: number; per_day: number; [key: string]: unknown };
+  warmup?: {
+    mailboxes: number;
+    per_day: number;
+    /** What the same mailboxes warm at with no live campaign. */
+    per_day_without?: number;
+    /** The least share of warmup mail pool partners answer while the campaign runs. */
+    reply_rate?: number;
+    [key: string]: unknown;
+  };
   /** What the pool already sends for other campaigns on an average recent day. */
   other_campaigns_per_day?: number;
   /** The clamp that costs the most sends on the first sending day; empty when mailbox caps are the limit. */
@@ -299,7 +307,17 @@ export interface CampaignEstimate {
   timeline?: CampaignEstimateDay[];
   /** The pool mailbox by mailbox, at most 200. */
   senders?: CampaignEstimateSender[];
+  /** Changes that would finish sooner, each simulated the same way. */
+  scenarios?: CampaignEstimateScenario[];
   [key: string]: unknown;
+}
+
+/** One change and the finish it would bring. `value` is the reply percent, mailboxes added or sending days a week. */
+export interface CampaignEstimateScenario {
+  /** `replies`, `more_mailboxes` or `every_day`. */
+  kind: "replies" | "more_mailboxes" | "every_day" | (string & {});
+  value: number;
+  finish_at: string | null;
 }
 
 /** What limits a campaign estimate's first sending day. */
@@ -339,6 +357,8 @@ export interface CampaignEstimateSender {
   first_day_cap: number;
   steady_cap: number;
   warmup_per_day: number;
+  /** The mailbox's warmup volume with no live campaign. */
+  warmup_without?: number;
   full_cap_at: string | null;
   [key: string]: unknown;
 }
