@@ -1,12 +1,15 @@
 import type { HttpClient } from "../core/http";
 import type { Page } from "../core/pagination";
 import type {
+  AppListing,
+  AppListingWrite,
   AuthorizedApp,
   OAuthApplication,
   OAuthApplicationWithSecret,
   OAuthApplicationWrite,
   WebhookDelivery,
   WebhookEndpointHealth,
+  WorkspaceAuthorization,
 } from "./types";
 
 /**
@@ -90,24 +93,24 @@ export class OAuthApplications {
   }
 
   /**
-   * Deletes an OAuth application.
+   * Deletes an OAuth application. The server answers `{ deleted: true }`.
    *
    * @example
    * await warmbly.oauth.applications.delete("wmcid_...");
    */
-  async delete(id: string): Promise<void> {
-    await this.http.delete<void>(`/oauth/applications/${encodeURIComponent(id)}`);
+  async delete(id: string): Promise<{ deleted: boolean }> {
+    return this.http.delete<{ deleted: boolean }>(`/oauth/applications/${encodeURIComponent(id)}`);
   }
 
   /**
-   * Rotates the application's client secret, returning the new secret once.
+   * Rotates the application's client secret, returning the new secret once. The server
+   * answers `{ client_secret }` only, not the application.
    *
    * @example
-   * const app = await warmbly.oauth.applications.rotateSecret("wmcid_...");
-   * console.log(app.client_secret);
+   * const { client_secret } = await warmbly.oauth.applications.rotateSecret("wmcid_...");
    */
-  async rotateSecret(id: string): Promise<OAuthApplicationWithSecret> {
-    return this.http.post<OAuthApplicationWithSecret>(
+  async rotateSecret(id: string): Promise<{ client_secret: string }> {
+    return this.http.post<{ client_secret: string }>(
       `/oauth/applications/${encodeURIComponent(id)}/rotate-secret`,
     );
   }
@@ -128,6 +131,84 @@ export class OAuthApplications {
     const form = new FormData();
     form.append("file", file, filename);
     return this.http.post<{ logo_url: string }>("/oauth/application-logo", { body: form });
+  }
+
+  /**
+   * Uploads the application's logo (PNG or JPEG, at most 2 MB, 32 to 1,024 pixels per
+   * side). Warmbly re-encodes and stores it, sets it on the app, and deletes the previous
+   * one. Resolves to the updated application. Needs `API_KEYS`; refused for OAuth tokens
+   * and for suspended apps.
+   *
+   * @example
+   * const app = await warmbly.oauth.applications.setLogo("app_1", file, "logo.png");
+   * console.log(app.logo_url);
+   */
+  async setLogo(id: string, file: Blob, filename?: string): Promise<OAuthApplication> {
+    const form = new FormData();
+    // Append the filename only when there is one: a non-spec FormData would stringify
+    // an explicit undefined into a file named "undefined".
+    if (filename !== undefined) form.append("file", file, filename);
+    else form.append("file", file);
+    return this.http.post<OAuthApplication>(`/oauth/applications/${encodeURIComponent(id)}/logo`, {
+      body: form,
+    });
+  }
+
+  /**
+   * Removes the application's logo and deletes the stored image. Resolves to the updated
+   * application. Needs `API_KEYS`; refused for OAuth tokens and for suspended apps.
+   *
+   * @example
+   * const app = await warmbly.oauth.applications.deleteLogo("app_1");
+   */
+  async deleteLogo(id: string): Promise<OAuthApplication> {
+    return this.http.delete<OAuthApplication>(`/oauth/applications/${encodeURIComponent(id)}/logo`);
+  }
+
+  /**
+   * Reads the application's community-directory listing. `listing` is `null` when the app
+   * is not published. Needs `API_KEYS`; refused for OAuth tokens.
+   *
+   * @example
+   * const { listing } = await warmbly.oauth.applications.getListing("app_1");
+   */
+  async getListing(id: string): Promise<{ listing: AppListing | null }> {
+    return this.http.get<{ listing: AppListing | null }>(
+      `/oauth/applications/${encodeURIComponent(id)}/listing`,
+    );
+  }
+
+  /**
+   * Publishes the app to the community directory, or replaces its listing (the whole
+   * listing is replaced, so repeating the request is safe). Refusals: 400
+   * `invalid_listing`, 400 `app_not_listable`, 409 `listing_slug_taken`. Needs `API_KEYS`.
+   *
+   * @example
+   * const { listing } = await warmbly.oauth.applications.putListing("app_1", {
+   *   slug: "acme-sync",
+   *   tagline: "Push positive replies into Acme as deals",
+   *   category: "crm",
+   *   install_url: "https://acme.com/warmbly/install",
+   * });
+   */
+  async putListing(id: string, body: AppListingWrite): Promise<{ listing: AppListing }> {
+    return this.http.put<{ listing: AppListing }>(
+      `/oauth/applications/${encodeURIComponent(id)}/listing`,
+      { body },
+    );
+  }
+
+  /**
+   * Unpublishes the app: removes the listing and its link. Succeeds when there is no
+   * listing, so it is safe to retry. Needs `API_KEYS`; refused for OAuth tokens.
+   *
+   * @example
+   * await warmbly.oauth.applications.deleteListing("app_1");
+   */
+  async deleteListing(id: string): Promise<{ deleted: boolean }> {
+    return this.http.delete<{ deleted: boolean }>(
+      `/oauth/applications/${encodeURIComponent(id)}/listing`,
+    );
   }
 
   /**
@@ -202,15 +283,52 @@ export class OAuthApplications {
   }
 
   /**
-   * Revokes a previously authorized application by its authorization id.
+   * Revokes the current user's authorization of an application, by the application id
+   * (the `application_id` of an {@link AuthorizedApp}). Answers `{ revoked: true }`.
    *
    * Note: this endpoint is dashboard-only. It requires a logged-in user session (JWT) and
    * cannot be called with an API key or an OAuth access token.
    *
    * @example
-   * await warmbly.oauth.applications.revokeAuthorizedApp("auth_...");
+   * await warmbly.oauth.applications.revokeAuthorizedApp("app_1");
    */
-  async revokeAuthorizedApp(id: string): Promise<void> {
-    await this.http.delete<void>(`/oauth/authorized-apps/${encodeURIComponent(id)}`);
+  async revokeAuthorizedApp(applicationId: string): Promise<{ revoked: boolean }> {
+    return this.http.delete<{ revoked: boolean }>(
+      `/oauth/authorized-apps/${encodeURIComponent(applicationId)}`,
+    );
+  }
+
+  /**
+   * Lists every member's live app authorizations in the workspace. Needs the
+   * `manage_api_keys` or `manage_settings` org permission.
+   *
+   * Note: this endpoint is dashboard-only (JWT session).
+   *
+   * @example
+   * const auths = await warmbly.oauth.applications.listWorkspaceAuthorizations();
+   */
+  async listWorkspaceAuthorizations(): Promise<WorkspaceAuthorization[]> {
+    const payload = await this.http.get<{ authorizations?: WorkspaceAuthorization[] }>(
+      "/oauth/workspace-authorizations",
+    );
+    return payload?.authorizations ?? [];
+  }
+
+  /**
+   * Revokes one member's authorization of an app in the workspace. Succeeds when there is
+   * nothing to revoke. Needs the `manage_api_keys` or `manage_settings` org permission.
+   *
+   * Note: this endpoint is dashboard-only (JWT session).
+   *
+   * @example
+   * await warmbly.oauth.applications.revokeWorkspaceAuthorization("app_1", "user_1");
+   */
+  async revokeWorkspaceAuthorization(
+    applicationId: string,
+    userId: string,
+  ): Promise<{ revoked: boolean }> {
+    return this.http.delete<{ revoked: boolean }>(
+      `/oauth/workspace-authorizations/${encodeURIComponent(applicationId)}/members/${encodeURIComponent(userId)}`,
+    );
   }
 }

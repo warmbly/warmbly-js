@@ -19,9 +19,12 @@ export interface ApiKey {
   key_suffix: string;
   /** Permission bitmask carried by the key. */
   permissions: number;
-  allowed_ips: string[];
-  allowed_email_accounts: string[];
+  /** Omitted by the server when the key has no IP allowlist. */
+  allowed_ips?: string[];
+  /** Omitted by the server when the key is not limited to specific mailboxes. */
+  allowed_email_accounts?: string[];
   rate_limit_per_minute: number;
+  /** The stored status is `active` or `revoked`; a key past `expires_at` still reads `active` but no longer authenticates. */
   status: ApiKeyStatus;
   last_used_at?: string | null;
   last_request_ip?: string | null;
@@ -52,7 +55,10 @@ export interface CreateApiKeyParams {
   [key: string]: unknown;
 }
 
-/** Body for updating an API key. All fields optional. */
+/**
+ * Body for updating an API key. All fields optional. The expiry cannot be changed after
+ * creation (the server does not bind `expires_at` on update).
+ */
 export interface UpdateApiKeyParams {
   name?: string;
   description?: string;
@@ -60,7 +66,6 @@ export interface UpdateApiKeyParams {
   allowed_ips?: string[];
   allowed_email_accounts?: string[];
   rate_limit_per_minute?: number;
-  expires_at?: string | null;
   [key: string]: unknown;
 }
 
@@ -81,11 +86,46 @@ export interface PermissionCatalog {
     full_access: number;
     [key: string]: unknown;
   };
+  /** The permission mask the caller may put on a key: their role, or the calling key's own permissions. */
+  grantable?: number;
+  /** The mask an OAuth app may request (everything except key management). */
+  app_scopes?: number;
   [key: string]: unknown;
 }
 
 /** Aggregate usage summary across all of the organization's API keys. */
 export interface ApiKeyUsageSummary {
+  active_keys?: number;
+  revoked_keys?: number;
+  expired_keys?: number;
+  requests_24h?: number;
+  errors_24h?: number;
+  avg_latency_ms_24h?: number;
+  last_call_at?: string | null;
+  [key: string]: unknown;
+}
+
+/** One time bucket of API key traffic. */
+export interface ApiKeyUsageBucket {
+  bucket: string;
+  total: number;
+  /** 2xx responses. */
+  success: number;
+  /** 4xx responses. */
+  client_errors: number;
+  /** 5xx responses. */
+  server_errors: number;
+  avg_latency_ms: number;
+  [key: string]: unknown;
+}
+
+/** Per-endpoint traffic for an API key. */
+export interface ApiKeyEndpointStat {
+  endpoint: string;
+  method: string;
+  count: number;
+  error_count: number;
+  avg_latency_ms: number;
   [key: string]: unknown;
 }
 
@@ -96,11 +136,28 @@ export interface ApiKeyUsageAnalytics {
 
 /** Usage analytics for a single API key. */
 export interface ApiKeyAnalytics {
+  api_key_id?: string;
+  from?: string;
+  to?: string;
+  interval?: string;
+  buckets?: ApiKeyUsageBucket[];
+  endpoints?: ApiKeyEndpointStat[];
+  total?: number;
+  errors?: number;
   [key: string]: unknown;
 }
 
 /** A single request log line for an API key. */
 export interface ApiKeyLog {
+  id?: string;
+  api_key_id?: string;
+  endpoint?: string;
+  method?: string;
+  ip_address?: string;
+  user_agent?: string;
+  response_code?: number;
+  response_time_ms?: number;
+  created_at?: string;
   [key: string]: unknown;
 }
 
@@ -194,7 +251,7 @@ export class ApiKeys extends APIResource {
   }
 
   /**
-   * Revokes an API key, optionally recording a reason (sent as the `reason` query param).
+   * Revokes an API key (needs `API_KEYS`), optionally recording a reason (sent as the `reason` query param).
    * Returns an acknowledgement (`{ status: "revoked" }`), not the key record.
    *
    * @example
@@ -204,6 +261,19 @@ export class ApiKeys extends APIResource {
     return this.http.delete<{ status: string }>(this.path("api-keys", id), {
       query: reason !== undefined ? { reason } : undefined,
     });
+  }
+
+  /**
+   * Permanently deletes a key that is already revoked or expired, removing it and its
+   * usage history. Refuses with `409` while the key can still authenticate: revoke it
+   * first. Needs `API_KEYS`; refused for OAuth tokens.
+   *
+   * @example
+   * await warmbly.apiKeys.revoke("key_123");
+   * const { status } = await warmbly.apiKeys.deletePermanently("key_123"); // "deleted"
+   */
+  deletePermanently(id: string, opts?: RequestOptions): Promise<{ status: string }> {
+    return this.http.delete<{ status: string }>(this.path("api-keys", id, "permanent"), opts);
   }
 
   /**

@@ -17,6 +17,22 @@ export interface EmailAccount {
   tracking_domain_verified?: boolean;
   /** The mailbox's own IANA zone, when set. */
   timezone?: string;
+  /** The verified provider alias the mailbox sends from. Empty means its own address. */
+  send_as_email?: string;
+  /** Who hosts the mailbox (for example `google_workspace`, `microsoft365`); empty until known. */
+  mail_host?: string;
+  /** How the mailbox signs in: `password`, `app_password`, `oauth` or `delegated`; empty until known. */
+  auth_method?: "password" | "app_password" | "oauth" | "delegated" | (string & {});
+  avatar_url?: string;
+  /** Whether hand-written unibox sends carry open and click tracking. */
+  track_direct_mail?: boolean;
+  /** Where warmup mail is filed: `folder`, `inbox` or `archive`. */
+  warmup_placement?: "folder" | "inbox" | "archive" | (string & {});
+  warmup_folder?: string;
+  /** Days warmup mail is kept; 0 follows the instance setting. */
+  warmup_retention_days?: number;
+  /** Whether unibox Archive, Delete and Move to inbox are mirrored in the mailbox. */
+  relay_folder_moves?: boolean;
   created_at?: string;
   updated_at?: string;
   [key: string]: unknown;
@@ -24,12 +40,40 @@ export interface EmailAccount {
 
 /** Body for {@link Emails.update}. Every field is optional; open shape. */
 export interface UpdateEmailParams {
+  name?: string;
+  signature_plain?: string;
+  signature_html?: string;
+  signature_sync?: boolean;
+  signature_code?: boolean;
+  /** A verified provider alias to send as. An empty string clears it back to the mailbox address. */
+  send_as_email?: string;
+  /** `active` or `inactive` (`revoked` is accepted by the model but set by the platform). */
+  status?: "active" | "inactive" | "revoked" | (string & {});
   /** Daily cold-campaign cap, 0..5000 (default 50). */
   campaign_limit?: number;
+  min_wait_time?: number;
+  reply_to?: string;
+  warmup?: boolean;
+  warmup_base?: number;
+  warmup_max?: number;
+  warmup_increase?: number;
+  warmup_reply_rate?: number;
+  warmup_tag?: string;
+  warmup_start_time?: string;
+  warmup_end_time?: string;
+  warmup_days?: number;
+  /** `folder`, `inbox` or `archive`. */
+  warmup_placement?: "folder" | "inbox" | "archive" | (string & {});
+  /** Destination for `folder` placement. An empty string restores the instance default. */
+  warmup_folder?: string;
+  /** Days to keep warmup mail; 0 goes back to the instance setting. */
+  warmup_retention_days?: number;
   /** The mailbox's IANA zone. Send an empty string to clear it. */
   timezone?: string;
   /** SMTP/IMAP only: file a copy of each outbound message in the Sent folder (default true). */
   save_to_sent?: boolean;
+  /** Mirror unibox Archive, Delete and Move to inbox in the mailbox itself (default true). */
+  relay_folder_moves?: boolean;
   [key: string]: unknown;
 }
 
@@ -185,8 +229,142 @@ export interface EmailSyncStatus {
     backfill_messages?: number;
     daily_messages?: number;
     org_daily_messages?: number;
+    /** Folders the sync leaves alone (IMAP only). */
+    skip_folders?: string[];
     [key: string]: unknown;
   };
+  /** The stored skip list, the value {@link Emails.updateSync} writes. Never null. */
+  skip_folders?: string[];
+  /** Folders the worker last listed, INBOX first. Empty for Gmail and Outlook. */
+  folders?: SyncFolder[];
+  [key: string]: unknown;
+}
+
+/** One folder the sync has seen: the name to use in `skip_folders` and the canonical folder it files under. */
+export interface SyncFolder {
+  name: string;
+  folder: string;
+  [key: string]: unknown;
+}
+
+/** One address a mailbox may send as. */
+export interface SendAsIdentity {
+  email: string;
+  name: string;
+  is_primary: boolean;
+  is_default: boolean;
+  /** Unverified aliases are listed but the provider refuses to send as them. */
+  verified: boolean;
+  [key: string]: unknown;
+}
+
+/**
+ * A mailbox's sending identity. Only Gmail exposes send-as addresses and a stored
+ * signature; other providers answer `supported: false` with an empty list.
+ */
+export interface EmailSendIdentity {
+  supported: boolean;
+  provider: string;
+  /** The address the mailbox authenticates as; what an empty `send_as_email` means. */
+  mailbox_email: string;
+  send_as_email: string;
+  identities: SendAsIdentity[];
+  synced_at?: string;
+  /** `manual` or `provider`. */
+  signature_source: "manual" | "provider" | (string & {});
+  signature_imported_at?: string;
+  [key: string]: unknown;
+}
+
+/** Body for {@link Emails.refreshIdentity}. */
+export interface RefreshEmailIdentityParams {
+  /** Overwrite the stored signature with the provider's (default false). */
+  import_signature?: boolean;
+  [key: string]: unknown;
+}
+
+/** A certificate a mail server presented on the last connection check. */
+export interface MailCertificate {
+  /** SHA-256 of the leaf's SubjectPublicKeyInfo, lowercase hex. */
+  fingerprint: string;
+  subject?: string;
+  issuer?: string;
+  /** Expiry, RFC 3339. */
+  not_after?: string;
+  self_signed?: boolean;
+  /** True when the chain also passes CA and host name verification. */
+  trusted?: boolean;
+  [key: string]: unknown;
+}
+
+/** One server's certificate policy on an SMTP/IMAP mailbox. */
+export interface MailboxServerCertificate {
+  host: string;
+  port: number;
+  /** The owner chose to trust this server on its pinned certificate instead of a CA. */
+  tls_unverified: boolean;
+  tls_pin?: string;
+  /** What the server presented on a check; absent on a plain read. */
+  observed?: MailCertificate;
+  [key: string]: unknown;
+}
+
+/** An SMTP/IMAP mailbox's certificate policy per server. */
+export interface MailboxCertificates {
+  smtp: MailboxServerCertificate;
+  imap: MailboxServerCertificate;
+  [key: string]: unknown;
+}
+
+/** What {@link Emails.resumeSending} lifted. */
+export interface ResumeSendingResult {
+  /** A provider refusal hold was released. */
+  hold_released: boolean;
+  /** A timed provider pause was cleared. */
+  cooldown_cleared: boolean;
+  [key: string]: unknown;
+}
+
+/** One mailbox's outcome in a bulk call. */
+export interface BulkEmailResult {
+  id: string;
+  ok: boolean;
+  /** The error code the single-mailbox route would answer. Present when `ok` is false. */
+  code?: string;
+  /** The error message the single-mailbox route would answer. Present when `ok` is false. */
+  message?: string;
+  [key: string]: unknown;
+}
+
+/** The result of a bulk mailbox call. HTTP 200 even when some rows failed; check `results`. */
+export interface BulkEmailsResult {
+  succeeded: number;
+  failed: number;
+  /** One row per distinct id, in request order. */
+  results: BulkEmailResult[];
+  [key: string]: unknown;
+}
+
+/** Body for {@link Emails.bulkDelete}: 1..500 mailbox ids. */
+export interface BulkDeleteEmailsParams {
+  email_ids: string[];
+  [key: string]: unknown;
+}
+
+/** Body for {@link Emails.bulkStatus}. */
+export interface BulkStatusEmailsParams {
+  /** 1..500 mailbox ids. */
+  email_ids: string[];
+  status: "active" | "inactive";
+  [key: string]: unknown;
+}
+
+/** Body for {@link Emails.bulkWarmup}. */
+export interface BulkWarmupEmailsParams {
+  /** 1..500 mailbox ids. */
+  email_ids: string[];
+  /** Appeal is not available in bulk. */
+  action: "start" | "pause" | "resume" | "stop";
   [key: string]: unknown;
 }
 
@@ -257,7 +435,7 @@ export class Emails extends APIResource {
   /**
    * Lists mailboxes, auto-paginating when iterated.
    * @example
-   * const page = await warmbly.emails.list({ status: "connected" });
+   * const page = await warmbly.emails.list({ q: "team@", tag: "vip" });
    */
   list(params?: ListEmailsParams): Promise<Page<EmailAccount>> {
     return this.http.getPage<EmailAccount>("emails", { query: params });
@@ -275,7 +453,7 @@ export class Emails extends APIResource {
   /**
    * Updates a mailbox.
    * @example
-   * await warmbly.emails.update("mb_1", { daily_send_limit: 40 });
+   * await warmbly.emails.update("mb_1", { campaign_limit: 40 });
    */
   update(id: string, params: UpdateEmailParams): Promise<EmailAccount> {
     return this.http.patch<EmailAccount>(this.path("emails", id), { body: params });
@@ -373,7 +551,8 @@ export class Emails extends APIResource {
 
   /**
    * Reports the mailbox's inbound sync: backfill progress, whether fair use is holding
-   * it, and the policy it runs under.
+   * it, the policy it runs under, the folders the owner excluded, and the folders the
+   * sync has seen. Needs `READ_EMAILS`.
    * @example
    * const { state, policy } = await warmbly.emails.sync("mb_1");
    */
@@ -481,5 +660,122 @@ export class Emails extends APIResource {
     return this.http.post<Record<string, unknown>>(this.path("emails", id, "send"), {
       body: params,
     });
+  }
+
+  /**
+   * Reads an SMTP/IMAP mailbox's certificate policy per server (host, port, whether it is
+   * trusted on a pin). Stored state only; no connection is made. Needs `READ_EMAILS`.
+   * @example
+   * const { smtp, imap } = await warmbly.emails.certificates("mb_1");
+   */
+  certificates(id: string, opts?: RequestOptions): Promise<MailboxCertificates> {
+    return this.http.get<MailboxCertificates>(this.path("emails", id, "certificates"), opts);
+  }
+
+  /**
+   * Switches open and click tracking on or off for this mailbox's hand-written unibox
+   * sends (off by default). Needs `WRITE_EMAILS`.
+   * @example
+   * const { track_direct_mail } = await warmbly.emails.setDirectTracking("mb_1", true);
+   */
+  setDirectTracking(
+    id: string,
+    enabled: boolean,
+    opts?: RequestOptions,
+  ): Promise<{ track_direct_mail: boolean }> {
+    return this.http.patch<{ track_direct_mail: boolean }>(
+      this.path("emails", id, "direct-tracking"),
+      { ...opts, body: { enabled } },
+    );
+  }
+
+  /**
+   * Reports which addresses the mailbox may send as, which one it uses, and where its
+   * signature came from. Stored state only; the provider is not called. Needs `READ_EMAILS`.
+   * @example
+   * const { identities, send_as_email } = await warmbly.emails.identity("mb_1");
+   */
+  identity(id: string, opts?: RequestOptions): Promise<EmailSendIdentity> {
+    return this.http.get<EmailSendIdentity>(this.path("emails", id, "identity"), opts);
+  }
+
+  /**
+   * Re-reads the mailbox's send-as addresses from the provider and stores them,
+   * optionally importing the provider's signature (which overwrites the stored one).
+   * Retry-safe. Needs `WRITE_EMAILS`.
+   * @example
+   * await warmbly.emails.refreshIdentity("mb_1", { import_signature: true });
+   */
+  refreshIdentity(
+    id: string,
+    params?: RefreshEmailIdentityParams,
+    opts?: RequestOptions,
+  ): Promise<EmailSendIdentity> {
+    return this.http.post<EmailSendIdentity>(this.path("emails", id, "identity", "refresh"), {
+      ...opts,
+      body: params,
+    });
+  }
+
+  /**
+   * Lifts a provider pause or refusal hold on sending. A no-op when nothing is held, so
+   * retries are safe. An authentication hold needs a reconnect instead. Needs `WRITE_EMAILS`.
+   * @example
+   * const { hold_released, cooldown_cleared } = await warmbly.emails.resumeSending("mb_1");
+   */
+  resumeSending(id: string, opts?: RequestOptions): Promise<ResumeSendingResult> {
+    return this.http.post<ResumeSendingResult>(this.path("emails", id, "resume-sending"), opts);
+  }
+
+  /**
+   * Replaces the folders the mailbox's sync leaves alone (IMAP only; each name also
+   * covers its subfolders). The list is the desired state, so a retry converges. Use the
+   * `name` values from {@link Emails.sync}'s `folders`. Needs `WRITE_EMAILS`.
+   * @example
+   * const { skip_folders } = await warmbly.emails.updateSync("mb_1", ["Junk", "Newsletters"]);
+   */
+  updateSync(
+    id: string,
+    skipFolders: string[],
+    opts?: RequestOptions,
+  ): Promise<{ skip_folders: string[] }> {
+    return this.http.put<{ skip_folders: string[] }>(this.path("emails", id, "sync"), {
+      ...opts,
+      body: { skip_folders: skipFolders },
+    });
+  }
+
+  /**
+   * Removes up to 500 mailboxes through the single delete path. Answers 200 with one row
+   * per id; a mailbox already gone reports `not_found` in its row, so a retry is safe.
+   * Needs `WRITE_EMAILS`.
+   * @example
+   * const { succeeded, failed, results } = await warmbly.emails.bulkDelete({
+   *   email_ids: ["mb_1", "mb_2"],
+   * });
+   */
+  bulkDelete(params: BulkDeleteEmailsParams, opts?: RequestOptions): Promise<BulkEmailsResult> {
+    return this.http.post<BulkEmailsResult>("emails/bulk/delete", { ...opts, body: params });
+  }
+
+  /**
+   * Switches up to 500 mailboxes `active` or `inactive`. Each call sets a state, so a
+   * retry converges. Needs `WRITE_EMAILS`.
+   * @example
+   * await warmbly.emails.bulkStatus({ email_ids: ["mb_1"], status: "inactive" });
+   */
+  bulkStatus(params: BulkStatusEmailsParams, opts?: RequestOptions): Promise<BulkEmailsResult> {
+    return this.http.post<BulkEmailsResult>("emails/bulk/status", { ...opts, body: params });
+  }
+
+  /**
+   * Starts, pauses, resumes or stops warmup on up to 500 mailboxes (appeals are
+   * single-mailbox only). Each action sets a state, so a retry converges. Needs
+   * `WRITE_EMAILS`.
+   * @example
+   * await warmbly.emails.bulkWarmup({ email_ids: ["mb_1", "mb_2"], action: "pause" });
+   */
+  bulkWarmup(params: BulkWarmupEmailsParams, opts?: RequestOptions): Promise<BulkEmailsResult> {
+    return this.http.post<BulkEmailsResult>("emails/bulk/warmup", { ...opts, body: params });
   }
 }

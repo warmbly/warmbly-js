@@ -195,11 +195,28 @@ describe("Misc teams", () => {
 describe("Misc audit logs", () => {
   it("lists audit logs as a page", async () => {
     const { http, fetchMock } = clientWith({
-      data: [{ action: "key.created" }],
+      data: [
+        {
+          id: "au_1",
+          org_id: "org_1",
+          user_id: "u_1",
+          actor: { id: "u_1", first_name: "Ada", last_name: "L", email: "ada@acme.com" },
+          action: "revoke",
+          entity_type: "api_key",
+          entity_id: "key_1",
+          ip_address: "203.0.113.4",
+          user_agent: "curl/8",
+          metadata: { reason: "leaked" },
+          action_date: "2026-10-01T10:00:00Z",
+          timestamp: "2026-10-01T10:00:00Z",
+        },
+      ],
       pagination: { total: 1, next_cursor: null, has_more: false },
     });
     const page = await new Misc(http).auditLogs();
-    expect(page.data[0]?.action).toBe("key.created");
+    expect(page.data[0]?.action).toBe("revoke");
+    expect(page.data[0]?.entity_type).toBe("api_key");
+    expect(page.data[0]?.actor?.email).toBe("ada@acme.com");
     const { url, init } = lastCall(fetchMock);
     expect(init.method).toBe("GET");
     expect(url).toContain("/audit-logs");
@@ -210,10 +227,18 @@ describe("Misc audit logs", () => {
       data: [],
       pagination: { total: 0, next_cursor: null, has_more: false },
     });
-    await new Misc(http).auditLogs({ action: "key.created" });
+    await new Misc(http).auditLogs({
+      action: "revoke",
+      entity_type: "api_key",
+      date: "2026-10-01",
+      limit: 25,
+    });
     const { url } = lastCall(fetchMock);
     expect(url).toContain("/audit-logs");
-    expect(url).toContain("action=key.created");
+    expect(url).toContain("action=revoke");
+    expect(url).toContain("entity_type=api_key");
+    expect(url).toContain("date=2026-10-01");
+    expect(url).toContain("limit=25");
   });
 });
 
@@ -422,5 +447,27 @@ describe("Misc reordering", () => {
     const { http, fetchMock } = clientWith([{ id: "a/b", position: 1 }]);
     await new Misc(http).moveCategory("a/b", 1);
     expect(lastCall(fetchMock).url).toContain("/categories/a%2Fb/move");
+  });
+});
+
+describe("Misc.authConfig (newer fields)", () => {
+  it("decodes app_attest, gmail_oauth_connect, api_url and brand", async () => {
+    const { http } = clientWith({
+      captcha: true,
+      app_attest: true,
+      self_hosted: false,
+      gmail_oauth_connect: false,
+      api_url: "https://api.warmbly.com",
+      brand: {
+        name: "Warmbly",
+        website_url: "https://warmbly.com",
+        support_email: "help@warmbly.com",
+      },
+    });
+    const cfg = await new Misc(http).authConfig();
+    expect(cfg.app_attest).toBe(true);
+    expect(cfg.gmail_oauth_connect).toBe(false);
+    expect(cfg.api_url).toBe("https://api.warmbly.com");
+    expect(cfg.brand?.name).toBe("Warmbly");
   });
 });

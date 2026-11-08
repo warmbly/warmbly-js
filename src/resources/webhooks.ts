@@ -16,6 +16,12 @@ export interface WebhookEndpoint {
   last_failure_at?: string | null;
   last_failure_reason?: string | null;
   consecutive_failures?: number;
+  /** Set when repeated failures disabled the endpoint. */
+  auto_disabled_at?: string | null;
+  disabled_reason?: string | null;
+  /** Set for endpoints owned by an OAuth app rather than the workspace. */
+  oauth_application_id?: string;
+  created_by?: string;
   created_at?: string;
   updated_at?: string;
   /** Only returned by create and rotate-secret. */
@@ -30,6 +36,8 @@ export interface WebhookEventDelivery {
   organization_id?: string;
   event_type?: string;
   event_id?: string;
+  /** The JSON envelope that was (or will be) POSTed: `{ id, event_type, organization_id, created_at, data }`. */
+  payload?: unknown;
   status?: "pending" | "in_flight" | "delivered" | "failed" | "abandoned";
   attempt_count?: number;
   max_attempts?: number;
@@ -48,7 +56,7 @@ export interface WebhookEventDelivery {
  * subset as `event_types`; an empty list subscribes to everything except the firehose
  * events in {@link WEBHOOK_FIREHOSE_EVENTS}, which are opt-in only.
  *
- * The live catalog — with descriptions and categories — is available at runtime via
+ * The live catalog - with descriptions and categories - is available at runtime via
  * {@link Webhooks.eventTypes}.
  */
 export const WEBHOOK_EVENTS = [
@@ -57,6 +65,7 @@ export const WEBHOOK_EVENTS = [
   "email_account.disconnected",
   "email_account.error",
   "email_account.synced",
+  /** Deprecated: never delivered. Use `warmup.health_changed`. */
   "email_account.health_changed",
 
   "campaign.created",
@@ -65,9 +74,11 @@ export const WEBHOOK_EVENTS = [
   "campaign.started",
   "campaign.paused",
   "campaign.completed",
+  /** Deprecated: never delivered. Still accepted in `event_types` so saved subscriptions keep saving. */
   "campaign.action",
   "campaign.deliverability_warning",
   "campaign.email_sent",
+  /** Deprecated: never delivered (delivery is not observable). Use `campaign.email_sent` and `campaign.email_bounced`. */
   "campaign.email_delivered",
   "campaign.email_opened",
   "campaign.email_clicked",
@@ -91,7 +102,9 @@ export const WEBHOOK_EVENTS = [
   "inbound.webhook",
 
   "inbox.email_received",
+  /** Deprecated: never delivered. */
   "inbox.email_updated",
+  /** Deprecated: never delivered. */
   "inbox.email_deleted",
   "inbox.reply_received",
 
@@ -142,11 +155,12 @@ export type WebhookEventName = (typeof WEBHOOK_EVENTS)[number];
 
 /**
  * High-volume, per-message events. They are excluded from the empty-filter "everything"
- * subscription so a catch-all endpoint isn't buried under per-open/click traffic —
+ * subscription so a catch-all endpoint isn't buried under per-open/click traffic -
  * list one explicitly in `event_types` to receive it.
  */
 export const WEBHOOK_FIREHOSE_EVENTS = [
   "campaign.email_sent",
+  /** Deprecated: never delivered (delivery is not observable). Use `campaign.email_sent` and `campaign.email_bounced`. */
   "campaign.email_delivered",
   "campaign.email_opened",
   "campaign.email_clicked",
@@ -154,7 +168,19 @@ export const WEBHOOK_FIREHOSE_EVENTS = [
   "inbox.email_received",
   "inbox.email_updated",
   "inbox.email_deleted",
-  "email_account.synced",
+  "automation.run",
+] as const satisfies readonly WebhookEventName[];
+
+/**
+ * Events kept for compatibility but never delivered. They stay valid in `event_types`,
+ * and an empty-filter subscription skips them.
+ */
+export const WEBHOOK_DEPRECATED_EVENTS = [
+  "campaign.email_delivered",
+  "campaign.action",
+  "inbox.email_updated",
+  "inbox.email_deleted",
+  "email_account.health_changed",
 ] as const satisfies readonly WebhookEventName[];
 
 /** An entry in the webhook event-type catalog. */
@@ -164,6 +190,8 @@ export interface WebhookEventType {
   description?: string;
   /** Whether the event is opt-in-only high-volume traffic. */
   firehose?: boolean;
+  /** Deprecated events are never delivered; the description names the replacement. */
+  deprecated?: boolean;
   [key: string]: unknown;
 }
 
@@ -173,6 +201,16 @@ export interface WebhookEndpointParams {
   description?: string;
   event_types?: string[];
   enabled?: boolean;
+  [key: string]: unknown;
+}
+
+/** A daily rollup of events the dispatch throttle dropped. */
+export interface WebhookThrottleDrop {
+  event_type: string;
+  /** The day, as a timestamp. */
+  day: string;
+  dropped_windows: number;
+  last_dropped_at: string;
   [key: string]: unknown;
 }
 
@@ -199,12 +237,19 @@ export interface ListDeliveriesParams {
  */
 export class Webhooks extends APIResource {
   /**
-   * Lists webhook endpoints. Returns the `{ endpoints }` object (not a paginated list).
+   * Lists webhook endpoints. Returns the `{ endpoints, event_types }` object (not a
+   * paginated list); `event_types` is the same catalog as {@link Webhooks.eventTypes}.
+   * Needs `WEBHOOKS`.
    * @example
    * const { endpoints } = await warmbly.webhooks.list();
    */
-  list(opts?: RequestOptions): Promise<{ endpoints: WebhookEndpoint[] }> {
-    return this.http.get<{ endpoints: WebhookEndpoint[] }>("webhooks", opts);
+  list(
+    opts?: RequestOptions,
+  ): Promise<{ endpoints: WebhookEndpoint[]; event_types?: WebhookEventType[] }> {
+    return this.http.get<{ endpoints: WebhookEndpoint[]; event_types?: WebhookEventType[] }>(
+      "webhooks",
+      opts,
+    );
   }
 
   /**
@@ -248,16 +293,18 @@ export class Webhooks extends APIResource {
   }
 
   /**
-   * Lists events suppressed by delivery or dispatch throttles.
+   * Lists events the dispatch throttle dropped, rolled up by day for the last 30 days.
+   * Takes no filters. Needs `WEBHOOKS`.
    * @example
-   * const drops = await warmbly.webhooks.throttleDrops();
+   * const { drops } = await warmbly.webhooks.throttleDrops();
    */
-  throttleDrops(params?: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return this.http.get<Record<string, unknown>>("webhooks/throttle-drops", { query: params });
+  throttleDrops(opts?: RequestOptions): Promise<{ drops: WebhookThrottleDrop[] }> {
+    return this.http.get<{ drops: WebhookThrottleDrop[] }>("webhooks/throttle-drops", opts);
   }
 
   /**
-   * Updates a webhook endpoint. Send the complete desired state (`event_types` is replaced).
+   * Updates a webhook endpoint. Send the complete desired state (`event_types` is
+   * replaced, and an omitted `enabled` means `true`).
    * @example
    * await warmbly.webhooks.update("ep_1", { url: "https://x.example.com/hook", enabled: false });
    */
@@ -284,12 +331,14 @@ export class Webhooks extends APIResource {
   }
 
   /**
-   * Sends a signed challenge to verify an endpoint (also a "send a test event" trigger).
+   * Sends a signed challenge to verify an endpoint. The server answers 202
+   * `{ status: "challenge_sent" }`; the endpoint is verified once the receiver echoes the
+   * challenge (in the body or the `X-Warmbly-Webhook-Challenge` header).
    * @example
    * await warmbly.webhooks.verify("ep_1");
    */
-  verify(id: string, opts?: RequestOptions): Promise<Record<string, unknown>> {
-    return this.http.post<Record<string, unknown>>(this.path("webhooks", id, "verify"), opts);
+  verify(id: string, opts?: RequestOptions): Promise<{ status: string }> {
+    return this.http.post<{ status: string }>(this.path("webhooks", id, "verify"), opts);
   }
 
   /**
