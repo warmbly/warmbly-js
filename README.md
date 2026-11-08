@@ -102,9 +102,12 @@ Resources hang off the client and mirror the API surface:
 | `warmbly.aiSkills` | Organization playbooks every AI surface follows |
 | `warmbly.agentTools` | The AI tool registry over HTTP, for function-calling agents without MCP |
 | `warmbly.templates` | Reply templates: render, score, duplicate |
-| `warmbly.crm` | Pipelines, deals, task types, tasks |
+| `warmbly.crm` | Pipelines, deals, task types, tasks, provider sync, owners, settings, list imports |
+| `warmbly.leads` | Lead finder: search, map points, facets, enrichment, export, saved searches, add to contacts |
+| `warmbly.placement` | Inbox placement tests and batches, coverage, seed mailboxes |
+| `warmbly.emailImages` | Images uploaded for use in email templates |
 | `warmbly.meetings` | Booked calls from Calendly and Cal.com, plus manual entries |
-| `warmbly.integrations` | Third-party connections, events, field mappings |
+| `warmbly.integrations` | Third-party connections, events, field mappings, plus `.apollo`, `.clay` and `.salesforce` |
 | `warmbly.automations` | The visual flow builder: trigger events plus action steps |
 | `warmbly.leadSync` | On-demand Google Sheets to contacts sync |
 | `warmbly.webhooks` | Webhook endpoints, deliveries, event types |
@@ -331,6 +334,8 @@ re-sends that join once the budget resets. Every other join refusal is final and
 `error`.
 
 To connect, the token must be an API key with the `REALTIME_SUBSCRIBE` permission, or an OAuth access token with the `realtime_subscribe` scope. The client inherits the token from the `Warmbly` client automatically.
+
+The gateway no longer accepts API keys or OAuth tokens in the URL. The client sends them in the `X-Warmbly-Token` handshake header (`tokenTransport: "auto"`), which `ws`, Node's global `WebSocket`, Bun and Deno support. Browsers cannot set handshake headers, so use a server-side client, or pass the short-lived connection token a signed-in session obtains. Pass `tokenTransport: "query"` only against a self-hosted gateway that still allows it.
 
 Treat event payloads as invalidation signals: they carry ids, not full state. Refetch over REST when you need the current contents.
 

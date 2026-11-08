@@ -102,6 +102,69 @@ export const PERMISSION_PRESETS = {
   full_access: PERMISSION_NAMES.reduce((mask, name) => mask | PERMISSIONS[name], 0),
 } as const;
 
+/**
+ * The organization member permission each API permission acts under, mirroring the
+ * server's role-delegation table. A key or OAuth grant can carry a permission only when
+ * the member who creates or approves it holds every member permission listed. An empty
+ * list means every member qualifies.
+ */
+export const PERMISSION_ROLE_NEEDS: Readonly<Record<PermissionName, readonly string[]>> = {
+  READ_EMAILS: ["view_campaigns"],
+  READ_CAMPAIGNS: ["view_campaigns"],
+  READ_CONTACTS: ["view_contacts"],
+  READ_UNIBOX: ["access_unibox"],
+  READ_ANALYTICS: ["view_analytics"],
+  WRITE_EMAILS: ["manage_emails"],
+  WRITE_CAMPAIGNS: ["manage_campaigns"],
+  WRITE_CONTACTS: ["manage_contacts"],
+  WRITE_UNIBOX: ["access_unibox"],
+  BULK_CONTACTS: ["manage_contacts"],
+  BULK_CAMPAIGNS: ["manage_campaigns"],
+  REALTIME_SUBSCRIBE: [],
+  WEBHOOKS: ["manage_settings"],
+  API_KEYS: ["manage_api_keys"],
+  SEND_CAMPAIGNS: ["send_campaigns"],
+  READ_TEMPLATES: ["view_campaigns"],
+  WRITE_TEMPLATES: ["manage_campaigns"],
+  READ_CRM: ["view_contacts"],
+  WRITE_CRM: ["manage_contacts"],
+  READ_AUDIT_LOGS: ["view_analytics"],
+  INTEGRATIONS: ["use_integrations"],
+  WARMUP_ROUTING: ["manage_settings"],
+  AI_AGENT: ["use_ai"],
+  AI_RESEARCH: ["view_contacts", "use_ai"],
+};
+
+/**
+ * The widest mask a member can delegate to an API key or OAuth app, given the member
+ * permission names they hold (for example `["view_campaigns", "manage_contacts"]`). An
+ * owner delegates everything. Mirrors the server's `APIPermissionsForMember`.
+ *
+ * @example
+ * apiPermissionsForMember(["view_campaigns"]).toScopes();
+ * // ["read_emails", "read_campaigns", "realtime_subscribe", "read_templates"]
+ */
+export function apiPermissionsForMember(
+  memberPermissions: Iterable<string>,
+  owner = false,
+): Permissions {
+  if (owner) return Permissions.fullAccess();
+  const held = new Set(memberPermissions);
+  let mask = 0;
+  for (const name of PERMISSION_NAMES) {
+    if (PERMISSION_ROLE_NEEDS[name].every((need) => held.has(need))) mask |= PERMISSIONS[name];
+  }
+  return new Permissions(mask);
+}
+
+/**
+ * Every permission a third-party OAuth app may request: everything except `API_KEYS`,
+ * since key management stays with people. Also returned as `app_scopes` by
+ * `GET /api-keys/permissions`.
+ */
+export const APP_GRANTABLE_PERMISSIONS: number =
+  PERMISSION_PRESETS.full_access & ~PERMISSIONS.API_KEYS;
+
 function normalizeToBits(input: PermissionInput): number {
   if (typeof input === "number") return input;
   if (input instanceof Permissions) return input.value;

@@ -45,6 +45,11 @@ describe("close codes", () => {
     expect(describeCloseCode(1006)).toContain("1006");
   });
 
+  it("describes the header and single-use token refusals", () => {
+    expect(describeCloseCode(GatewayCloseCode.NOT_AUTHENTICATED)).toContain("X-Warmbly-Token");
+    expect(describeCloseCode(GatewayCloseCode.AUTH_FAILED)).toContain("already used");
+  });
+
   it("maps each enum member to its numeric code", () => {
     expect(GatewayCloseCode.NOT_AUTHENTICATED).toBe(4003);
     expect(GatewayCloseCode.AUTH_FAILED).toBe(4004);

@@ -11,7 +11,7 @@ function clientWith(
 ): { http: HttpClient; fetchMock: ReturnType<typeof vi.fn> } {
   const fetchMock = vi.fn(
     async () =>
-      new Response(body === undefined ? "" : JSON.stringify(body), {
+      new Response(body === undefined ? (init.status === 204 ? null : "") : JSON.stringify(body), {
         status: init.status ?? 200,
         headers: { "content-type": "application/json" },
       }),
@@ -438,12 +438,366 @@ describe("Campaigns: estimate, duplicate, forms, segments, start options", () =>
     expect(JSON.parse(String(init.body))).toEqual({ acknowledge_list_risk: true });
   });
 
-  it("list passes the kind filter", async () => {
+  it("list passes q and folder filters", async () => {
     const { http, fetchMock } = clientWith({
       data: [],
       pagination: { total: 0, next_cursor: null, has_more: false },
     });
-    await new Campaigns(http).list({ kind: "one_time" });
-    expect(lastCall(fetchMock).url).toContain("kind=one_time");
+    await new Campaigns(http).list({ q: "launch", folder: "f1" });
+    const { url } = lastCall(fetchMock);
+    expect(url).toContain("q=launch");
+    expect(url).toContain("folder=f1");
+  });
+
+  it("estimate sends the extended projection body and decodes the rich result", async () => {
+    const { http, fetchMock } = clientWith({
+      recipients: 100,
+      mailboxes: 2,
+      daily_capacity: 40,
+      remaining_today: 30,
+      sending_days: 3,
+      estimated_finish_at: "2026-11-12T00:00:00Z",
+      steps: 3,
+      total_sends: 300,
+      first_touch_finish_at: "2026-11-10T00:00:00Z",
+      steady_capacity: 60,
+      full_capacity_at: null,
+      ramping: 1,
+      held: 0,
+      warmup: { mailboxes: 2, per_day: 10, per_day_without: 20, reply_rate: 35 },
+      other_campaigns_per_day: 5,
+      bottleneck: "warmup_graduation",
+      timeline: [
+        {
+          date: "2026-11-09",
+          sending_day: true,
+          capacity: 40,
+          sends: 30,
+          first_emails: 30,
+          follow_ups: 0,
+          warmup: 10,
+        },
+      ],
+      senders: [
+        {
+          id: "a1",
+          email: "a@x.io",
+          provider: "google",
+          state: "ramping",
+          first_day_cap: 10,
+          steady_cap: 30,
+          warmup_per_day: 5,
+          warmup_without: 10,
+          full_cap_at: null,
+        },
+      ],
+      scenarios: [{ kind: "more_mailboxes", value: 2, finish_at: null }],
+    });
+    const est = await new Campaigns(http).estimate({
+      segment_ids: [],
+      campaign_id: "camp1",
+      start_time: "09:00",
+      end_time: "17:00",
+      step_waits: [3, 5],
+    });
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("POST");
+    expect(url).toContain("/campaigns-estimate");
+    expect(JSON.parse(String(init.body))).toEqual({
+      segment_ids: [],
+      campaign_id: "camp1",
+      start_time: "09:00",
+      end_time: "17:00",
+      step_waits: [3, 5],
+    });
+    expect(est.total_sends).toBe(300);
+    expect(est.timeline?.[0]?.first_emails).toBe(30);
+    expect(est.senders?.[0]?.state).toBe("ramping");
+    expect(est.scenarios?.[0]?.finish_at).toBeNull();
+  });
+
+  it("createStep treats a request-options-only second argument as options", async () => {
+    const { http, fetchMock } = clientWith({ id: "s1" });
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      new Campaigns(http).createStep("c1", { signal: controller.signal }),
+    ).rejects.toBeDefined();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("createStep sends the optional step body including thread_reply", async () => {
+    const { http, fetchMock } = clientWith({ id: "s2", thread_reply: false });
+    const step = await new Campaigns(http).createStep("c1", {
+      subject: "New topic",
+      thread_reply: false,
+      wait_after: 2,
+    });
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("POST");
+    expect(url).toContain("/campaigns/c1/steps");
+    expect(JSON.parse(String(init.body))).toEqual({
+      subject: "New topic",
+      thread_reply: false,
+      wait_after: 2,
+    });
+    expect(step.thread_reply).toBe(false);
+  });
+
+  it("getLeadHold reads the hold for one lead", async () => {
+    const { http, fetchMock } = clientWith({
+      campaign_id: "c1",
+      contact_id: "p1",
+      hold: {
+        since: "2026-11-08T10:00:00Z",
+        until: "2026-12-01T00:00:00Z",
+        reason: "ooo",
+        source: "out_of_office",
+      },
+    });
+    const res = await new Campaigns(http).getLeadHold("c1", "p1");
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("GET");
+    expect(url).toContain("/campaigns/c1/leads/p1/hold");
+    expect(res.hold?.source).toBe("out_of_office");
+  });
+
+  it("getLeadHold decodes an unheld lead (no hold key)", async () => {
+    const { http } = clientWith({ campaign_id: "c1", contact_id: "p1" });
+    const res = await new Campaigns(http).getLeadHold("c1", "p1");
+    expect(res.hold).toBeUndefined();
+  });
+
+  it("pauseLead posts until and reason", async () => {
+    const { http, fetchMock } = clientWith({
+      campaign_id: "c1",
+      contact_id: "p1",
+      hold: {
+        since: "2026-11-08T10:00:00Z",
+        until: "2026-12-01T00:00:00Z",
+        reason: "leave",
+        source: "manual",
+      },
+    });
+    const res = await new Campaigns(http).pauseLead("c1", "p1", {
+      until: "2026-12-01T00:00:00Z",
+      reason: "leave",
+    });
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("POST");
+    expect(url).toContain("/campaigns/c1/leads/p1/pause");
+    expect(JSON.parse(String(init.body))).toEqual({
+      until: "2026-12-01T00:00:00Z",
+      reason: "leave",
+    });
+    expect(res.hold?.source).toBe("manual");
+  });
+
+  it("pauseLead with no params sends no body (open-ended hold)", async () => {
+    const { http, fetchMock } = clientWith({
+      campaign_id: "c1",
+      contact_id: "p1",
+      hold: { since: "2026-11-08T10:00:00Z", source: "manual" },
+    });
+    await new Campaigns(http).pauseLead("c1", "p1");
+    expect(lastCall(fetchMock).init.body).toBeUndefined();
+  });
+
+  it("resumeLead posts with no body and decodes a hold-less answer", async () => {
+    const { http, fetchMock } = clientWith({ campaign_id: "c1", contact_id: "p1" });
+    const res = await new Campaigns(http).resumeLead("c1", "p1");
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("POST");
+    expect(url).toContain("/campaigns/c1/leads/p1/resume");
+    expect(init.body).toBeUndefined();
+    expect(res.hold).toBeUndefined();
+  });
+
+  it("getLeadCC reads the copied contacts", async () => {
+    const { http, fetchMock } = clientWith({
+      campaign_id: "c1",
+      contact_id: "p1",
+      cc: [
+        {
+          contact_id: "p2",
+          email: "b@x.io",
+          first_name: "B",
+          last_name: "Bee",
+          company: "X",
+          status: "bounced",
+          bounced_at: "2026-11-01T00:00:00Z",
+        },
+      ],
+    });
+    const res = await new Campaigns(http).getLeadCC("c1", "p1");
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("GET");
+    expect(url).toContain("/campaigns/c1/leads/p1/cc");
+    expect(res.cc[0]?.status).toBe("bounced");
+  });
+
+  it("setLeadCC PUTs contact_ids", async () => {
+    const { http, fetchMock } = clientWith({ campaign_id: "c1", contact_id: "p1", cc: [] });
+    const res = await new Campaigns(http).setLeadCC("c1", "p1", ["p2", "p3"]);
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("PUT");
+    expect(url).toContain("/campaigns/c1/leads/p1/cc");
+    expect(JSON.parse(String(init.body))).toEqual({ contact_ids: ["p2", "p3"] });
+    expect(res.cc).toEqual([]);
+  });
+
+  it("suggestLeadCC unwraps the data envelope", async () => {
+    const { http, fetchMock } = clientWith({
+      data: [
+        { contact_id: "p2", email: "b@x.io", first_name: "B", last_name: "Bee", reason: "domain" },
+      ],
+    });
+    const res = await new Campaigns(http).suggestLeadCC("c1", "p1");
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("GET");
+    expect(url).toContain("/campaigns/c1/leads/p1/cc/suggestions");
+    expect(res[0]?.reason).toBe("domain");
+  });
+
+  it("sendPlan reads the bare plan", async () => {
+    const { http, fetchMock } = clientWith({
+      campaign_id: "c1",
+      status: "active",
+      day: "2026-11-08",
+      timezone: "UTC",
+      computed_at: "2026-11-08T10:00:00Z",
+      stale: false,
+      configured_ceiling: 100,
+      projected_today: 60,
+      sent_today: 20,
+      expected_remaining: 40,
+      bottleneck: "campaign_daily_limit",
+      limits: [{ kind: "campaign_daily_limit", emails: 40, mailboxes: 2 }],
+      window: { sending_day: true, open_now: true, minutes_left: 300 },
+      leads: {
+        due_now: 10,
+        due_later_today: 5,
+        new_leads_due_today: 8,
+        waiting_on_step: 1,
+        waiting_on_condition: 0,
+        held: 2,
+        waiting_on_sender: 0,
+        new_leads_started_today: 3,
+        max_new_leads_per_day: 0,
+      },
+      mailboxes: [
+        {
+          id: "a1",
+          email: "a@x.io",
+          provider: "google",
+          configured_cap: 50,
+          cap_today: 30,
+          limited_by: "campaign_ramp",
+          sent_today: 10,
+          sent_by_other_campaigns: 0,
+          expected_remaining: 20,
+          state: "sending",
+          min_gap_seconds: 60,
+        },
+      ],
+    });
+    const plan = await new Campaigns(http).sendPlan("c1");
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("GET");
+    expect(url).toContain("/campaigns/c1/send-plan");
+    expect(plan.projected_today).toBe(60);
+    expect(plan.limits[0]?.kind).toBe("campaign_daily_limit");
+    expect(plan.mailboxes[0]?.limited_by).toBe("campaign_ramp");
+    expect(plan.organization).toBeUndefined();
+  });
+
+  it("warmupPlacement returns data and days", async () => {
+    const { http, fetchMock } = clientWith({
+      data: [
+        {
+          sequence_id: "s1",
+          variant_id: null,
+          placement: { sent: 10, reported: 8, inbox: 6, tabs: 1, spam: 1, rescued: 0 },
+          by_group: [
+            { group: "google", sent: 10, reported: 8, inbox: 6, tabs: 1, spam: 1, rescued: 0 },
+          ],
+        },
+      ],
+      days: 30,
+    });
+    const res = await new Campaigns(http).warmupPlacement("c1");
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("GET");
+    expect(url).toContain("/campaigns/c1/warmup-placement");
+    expect(res.days).toBe(30);
+    expect(res.data[0]?.variant_id).toBeNull();
+    expect(res.data[0]?.by_group[0]?.group).toBe("google");
+  });
+
+  it("getPlacementMonitor unwraps data and returns null when none", async () => {
+    const monitor = {
+      id: "m1",
+      campaign_id: "c1",
+      created_by: null,
+      enabled: true,
+      interval_days: 7,
+      panel: "instance",
+      alert_below: 70,
+      pause_on_alert: false,
+      next_run_at: "2026-11-09T00:00:00Z",
+      last_run_at: null,
+      last_test_id: null,
+      last_alert_at: null,
+      created_at: "2026-11-08T00:00:00Z",
+      updated_at: "2026-11-08T00:00:00Z",
+    };
+    const a = clientWith({ data: monitor });
+    const got = await new Campaigns(a.http).getPlacementMonitor("c1");
+    const { url, init } = lastCall(a.fetchMock);
+    expect(init.method).toBe("GET");
+    expect(url).toContain("/campaigns/c1/placement-monitor");
+    expect(got?.interval_days).toBe(7);
+    const b = clientWith({ data: null });
+    expect(await new Campaigns(b.http).getPlacementMonitor("c1")).toBeNull();
+  });
+
+  it("putPlacementMonitor PUTs the body and unwraps data", async () => {
+    const { http, fetchMock } = clientWith({
+      data: {
+        id: "m1",
+        campaign_id: "c1",
+        enabled: false,
+        interval_days: 3,
+        panel: "cloud",
+        alert_below: 50,
+        pause_on_alert: true,
+      },
+    });
+    const res = await new Campaigns(http).putPlacementMonitor("c1", {
+      enabled: false,
+      interval_days: 3,
+      panel: "cloud",
+      alert_below: 50,
+      pause_on_alert: true,
+    });
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("PUT");
+    expect(url).toContain("/campaigns/c1/placement-monitor");
+    expect(JSON.parse(String(init.body))).toEqual({
+      enabled: false,
+      interval_days: 3,
+      panel: "cloud",
+      alert_below: 50,
+      pause_on_alert: true,
+    });
+    expect(res.panel).toBe("cloud");
+  });
+
+  it("deletePlacementMonitor issues DELETE and tolerates 204", async () => {
+    const { http, fetchMock } = clientWith(undefined, { status: 204 });
+    await new Campaigns(http).deletePlacementMonitor("c1");
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("DELETE");
+    expect(url).toContain("/campaigns/c1/placement-monitor");
   });
 });

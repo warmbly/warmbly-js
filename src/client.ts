@@ -21,13 +21,16 @@ import {
   Campaigns,
   Contacts,
   Crm,
+  EmailImages,
   Emails,
   Forms,
   Generation,
   Integrations,
   LeadSync,
+  Leads,
   Meetings,
   Misc,
+  Placement,
   Segments,
   Suppressions,
   Templates,
@@ -116,6 +119,12 @@ export class Warmbly {
   readonly misc: Misc;
   /** Manage your own OAuth applications (requires the `API_KEYS` scope). */
   readonly oauthApplications: OAuthApplications;
+  /** Lead finder: search, enrich, and import leads. */
+  readonly leads: Leads;
+  /** Inbox placement tests and batches. */
+  readonly placement: Placement;
+  /** Uploaded images for email templates. */
+  readonly emailImages: EmailImages;
 
   constructor(options: ClientOptions = {}) {
     this.options = resolveClientOptions(options);
@@ -143,6 +152,9 @@ export class Warmbly {
     this.webhooks = new Webhooks(this.http);
     this.misc = new Misc(this.http);
     this.oauthApplications = new OAuthApplications(this.http);
+    this.leads = new Leads(this.http);
+    this.placement = new Placement(this.http);
+    this.emailImages = new EmailImages(this.http);
   }
 
   /**

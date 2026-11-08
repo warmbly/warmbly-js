@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0
+
+### Minor Changes
+
+- 0676eef: Breaking: shapes the server never matched are corrected, so some TypeScript code will need updating. `crm.listDeals`, `listTasks`, `searchDeals`, `searchTasks`, `dealsSummary` and `tasksSummary` have new signatures and return the server's `{ data, pagination }` as a `Page`; `crm.listPipelines` and `listTaskTypes` take no params. `contacts.importPreview` and `importCommit` now take the uploaded file (the server reads multipart, not an `upload_id`); `contacts.lookup` returns `{ contact, match }`. Campaign `kind` is gone (the server dropped it) and `campaigns.createStep` takes a body. Unibox `setThreadLabels`, `snooze` and `markSeen` use the keys the server binds (`category_ids`, `snoozed_until`, `email_ids`); `unibox.scheduled` and `unsnooze` shapes are fixed. Integrations list calls no longer take query params the server ignored, and `pushConnection` takes a required selection. Template, audit log, webhook and OAuth app types now match the server structs. API keys and OAuth tokens now reach the realtime gateway in the `X-Warmbly-Token` header instead of the URL, which the server now requires.
+
+  Added: new `leads`, `placement` and `emailImages` resources, and `integrations.apollo`, `.clay` and `.salesforce`. New methods for CRM provider sync, owners, settings, list imports and bulk tasks; contact imports and the Salesforce panel; campaign lead hold, CC, send plan, warmup placement and placement monitor; direct mail, inbox tagging and warmup placement analytics; template analysis; mailbox identity, certificates, bulk actions, resume sending and sync folders; unibox folder moves and thread drafts; permanent API key deletion; OAuth app listings and logos. New typed gateway events (`WARMUP_PLACEMENT`, `WARMUP_ACTIVITY`, `PLACEMENT_TEST_UPDATED`, `MAILBOX_IMPORT_PROGRESS`, `CONTACT_IMPORT_PROGRESS`, `CRM_SYNCED`, `DIRECT_EMAIL_OPENED`, `DIRECT_EMAIL_CLICKED`), new intents, `requiredScopeForEvent`, a named constant for every server error code, and permission delegation helpers.
+
 ## 0.3.0
 
 ### Minor Changes

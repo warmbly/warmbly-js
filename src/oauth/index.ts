@@ -16,6 +16,9 @@ export {
 } from "./token-store";
 
 export type {
+  AppListing,
+  AppListingStatus,
+  AppListingWrite,
   AuthorizationUrl,
   AuthorizationUrlParams,
   AuthorizedApp,
@@ -25,6 +28,7 @@ export type {
   OAuthApplicationWithSecret,
   OAuthApplicationWrite,
   OAuthClientOptions,
+  OAuthDeveloperAccess,
   RegisteredClient,
   RevokeParams,
   ScopeInput,
@@ -32,4 +36,5 @@ export type {
   TokenSet,
   WebhookDelivery,
   WebhookEndpointHealth,
+  WorkspaceAuthorization,
 } from "./types";

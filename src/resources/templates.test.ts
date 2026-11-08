@@ -130,48 +130,145 @@ describe("Templates", () => {
   });
 
   describe("render", () => {
-    it("POSTs to the render sub-path with variables", async () => {
-      const { http, fetchMock } = clientWith({ html: "<p>Hi Sam</p>" });
+    it("POSTs to the render sub-path with variables and decodes subject/bodies", async () => {
+      const rendered = { subject: "Hi Sam", body_html: "<p>Hi Sam</p>", body_plain: "Hi Sam" };
+      const { http, fetchMock } = clientWith(rendered);
       const result = await new Templates(http).render("tpl_1", {
-        variables: { first_name: "Sam" },
+        variables: { FirstName: "Sam" },
       });
-      expect(result).toEqual({ html: "<p>Hi Sam</p>" });
+      expect(result).toEqual(rendered);
       const { url, init } = lastCall(fetchMock);
       expect(init.method).toBe("POST");
       expect(url).toContain("/templates/tpl_1/render");
-      expect(await parseBody(init)).toEqual({ variables: { first_name: "Sam" } });
+      expect(await parseBody(init)).toEqual({ variables: { FirstName: "Sam" } });
     });
 
     it("works without params", async () => {
-      const { http, fetchMock } = clientWith({ html: "<p></p>" });
+      const { http, fetchMock } = clientWith({ subject: "", body_html: "", body_plain: "" });
       await new Templates(http).render("tpl_1");
       const { url, init } = lastCall(fetchMock);
       expect(init.method).toBe("POST");
       expect(url).toContain("/templates/tpl_1/render");
+      expect(init.body).toBeUndefined();
     });
   });
 
   describe("score", () => {
-    it("POSTs to templates/score with the params body", async () => {
-      const { http, fetchMock } = clientWith({ score: 92 });
-      const result = await new Templates(http).score({ subject: "Hi", body: "Hello" });
-      expect(result).toEqual({ score: 92 });
+    it("POSTs to templates/score with body_html/body_plain and decodes issues", async () => {
+      const { http, fetchMock } = clientWith({
+        score: 82,
+        issues: [
+          {
+            severity: "warn",
+            code: "trigger_word",
+            message: "Spammy phrase",
+            field: "subject",
+            spans: [{ text: "FREE" }],
+            suggestion: "Drop it",
+          },
+        ],
+      });
+      const result = await new Templates(http).score({ subject: "FREE", body_plain: "Hello" });
+      expect(result.score).toBe(82);
+      expect(result.issues[0]?.field).toBe("subject");
       const { url, init } = lastCall(fetchMock);
       expect(init.method).toBe("POST");
       expect(url).toContain("/templates/score");
-      expect(await parseBody(init)).toEqual({ subject: "Hi", body: "Hello" });
+      expect(await parseBody(init)).toEqual({ subject: "FREE", body_plain: "Hello" });
+    });
+  });
+
+  describe("analyze", () => {
+    it("POSTs to templates/analyze and decodes the AI analysis", async () => {
+      const { http, fetchMock } = clientWith({
+        score: 61,
+        verdict: "Likely to be filtered",
+        findings: [
+          {
+            severity: "high",
+            field: "subject",
+            text: "Act now!!!",
+            line: 1,
+            excerpt: "Act now!!!",
+            issue: "Urgency trigger",
+            suggestion: "Ask a question instead",
+            category: "trigger_word",
+          },
+        ],
+        suggested_subject: "Quick question",
+        improvements: ["Add a clear ask"],
+        rules: { score: 70, issues: [] },
+        judgment: {
+          reads_as: 0.8,
+          personalization: 0.2,
+          ask: "none",
+          spam_claim: 0.1,
+          confidence: 0.9,
+          model: "judge-1",
+          input_tokens: 120,
+        },
+        model: "claude-x",
+        tokens_used: 900,
+        credits_charged: 2,
+        credits_remaining: 98,
+        charged_usd: 0.02,
+        balance_usd: 0.98,
+      });
+      const params = { subject: "Act now!!!", body_html: "<p>Buy</p>", body_plain: "Buy" };
+      const result = await new Templates(http).analyze(params);
+      expect(result.findings[0]?.suggestion).toBe("Ask a question instead");
+      expect(result.rules.score).toBe(70);
+      expect(result.judgment?.ask).toBe("none");
+      expect(result.credits_charged).toBe(2);
+      const { url, init } = lastCall(fetchMock);
+      expect(init.method).toBe("POST");
+      expect(url).toContain("/templates/analyze");
+      expect(await parseBody(init)).toEqual(params);
+    });
+
+    it("decodes the judgment-only answer (no suggested subject, no improvements, no judgment-less fields)", async () => {
+      const { http } = clientWith({
+        score: 55,
+        verdict: "Reads as bulk",
+        findings: [],
+        rules: { score: 55, issues: [] },
+        judgment: {
+          reads_as: 0.9,
+          personalization: 0.1,
+          ask: "several",
+          spam_claim: 0.7,
+          confidence: 0.8,
+          model: "j",
+          input_tokens: 10,
+        },
+        model: "j",
+        tokens_used: 10,
+        credits_charged: 0,
+        credits_remaining: 5,
+        charged_usd: 0,
+        balance_usd: 0.05,
+      });
+      const result = await new Templates(http).analyze({ subject: "Hi" });
+      expect(result.findings).toEqual([]);
+      expect(result.suggested_subject).toBeUndefined();
+      expect(result.credits_charged).toBe(0);
     });
   });
 
   describe("reorder", () => {
-    it("PATCHes templates/reorder with the order body", async () => {
-      const { http, fetchMock } = clientWith({ ok: true });
-      const result = await new Templates(http).reorder({ order: ["tpl_2", "tpl_1"] });
-      expect(result).toEqual({ ok: true });
+    it("PATCHes templates/reorder with the ids body and returns the ordered set", async () => {
+      const { http, fetchMock } = clientWith({
+        data: [
+          { id: "tpl_2", position: 1 },
+          { id: "tpl_1", position: 2 },
+        ],
+      });
+      const result = await new Templates(http).reorder({ ids: ["tpl_2", "tpl_1"] });
+      expect(result.data.map((t) => t.position)).toEqual([1, 2]);
       const { url, init } = lastCall(fetchMock);
       expect(init.method).toBe("PATCH");
       expect(url).toContain("/templates/reorder");
-      expect(await parseBody(init)).toEqual({ order: ["tpl_2", "tpl_1"] });
+      expect(await parseBody(init)).toEqual({ ids: ["tpl_2", "tpl_1"] });
     });
   });
 

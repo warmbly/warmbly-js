@@ -29,13 +29,13 @@ if (!firstItem) {
   const thread = await warmbly.unibox.thread({ thread_id: threadId });
   console.log("thread", thread);
 
-  // 4. Replace the labels on the thread (and read them back).
-  await warmbly.unibox.setThreadLabels({ thread_id: threadId, labels: ["lead", "warm"] });
+  // 4. Replace the category labels on the thread (and read them back).
+  await warmbly.unibox.setThreadLabels({ thread_id: threadId, category_ids: ["cat_1", "cat_2"] });
   const labels = await warmbly.unibox.getThreadLabels({ thread_id: threadId });
   console.log("labels now", labels);
 
   // 5. Mark the conversation as seen.
-  await warmbly.unibox.markSeen({ ids: [conversationId], seen: true });
+  await warmbly.unibox.markSeen({ email_ids: [conversationId], seen: true });
   console.log("marked seen");
 
   // 6. Reply within the thread.
@@ -43,7 +43,7 @@ if (!firstItem) {
   console.log("reply sent");
 
   // 7. Snooze the conversation until a time, then unsnooze it.
-  await warmbly.unibox.snooze({ thread_id: threadId, until: "2026-07-01T09:00:00Z" });
+  await warmbly.unibox.snooze({ thread_id: threadId, snoozed_until: "2026-07-01T09:00:00Z" });
   console.log("snoozed");
   await warmbly.unibox.unsnooze({ thread_id: threadId });
   console.log("unsnoozed");
@@ -52,7 +52,7 @@ if (!firstItem) {
 // 8. List scheduled (queued) sends, and cancel the first one by its task id.
 const scheduled = await warmbly.unibox.scheduled();
 console.log("scheduled sends", scheduled);
-const tasks = (scheduled.tasks ?? []) as Array<{ task_id: string }>;
+const tasks = scheduled.data ?? [];
 if (tasks[0]) {
   await warmbly.unibox.cancelScheduled(tasks[0].task_id);
   console.log("cancelled scheduled send", tasks[0].task_id);

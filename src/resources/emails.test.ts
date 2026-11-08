@@ -324,3 +324,162 @@ describe("Emails: allowance, tracking domain, hold/release, sync, auth check, be
     });
   });
 });
+
+describe("Emails (identity, certificates, sync, bulk)", () => {
+  it("certificates GETs /emails/:id/certificates and decodes both servers", async () => {
+    const { http, fetchMock } = clientWith({
+      smtp: {
+        host: "smtp.acme.com",
+        port: 587,
+        tls_unverified: true,
+        tls_pin: "ab".repeat(32),
+        observed: {
+          fingerprint: "ab".repeat(32),
+          self_signed: true,
+          not_after: "2027-01-01T00:00:00Z",
+        },
+      },
+      imap: { host: "imap.acme.com", port: 993, tls_unverified: false },
+    });
+    const certs = await new Emails(http).certificates("mb 1");
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("GET");
+    expect(url).toMatch(/\/emails\/mb%201\/certificates$/);
+    expect(certs.smtp.tls_unverified).toBe(true);
+    expect(certs.smtp.observed?.self_signed).toBe(true);
+    expect(certs.imap.observed).toBeUndefined();
+  });
+
+  it("setDirectTracking PATCHes { enabled } and decodes track_direct_mail", async () => {
+    const { http, fetchMock } = clientWith({ track_direct_mail: true });
+    const out = await new Emails(http).setDirectTracking("mb1", true);
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("PATCH");
+    expect(url).toMatch(/\/emails\/mb1\/direct-tracking$/);
+    expect(JSON.parse(String(init.body))).toEqual({ enabled: true });
+    expect(out.track_direct_mail).toBe(true);
+  });
+
+  it("identity GETs /emails/:id/identity", async () => {
+    const { http, fetchMock } = clientWith({
+      supported: true,
+      provider: "google",
+      mailbox_email: "a@acme.com",
+      send_as_email: "",
+      identities: [
+        { email: "a@acme.com", name: "A", is_primary: true, is_default: true, verified: true },
+        {
+          email: "sales@acme.com",
+          name: "Sales",
+          is_primary: false,
+          is_default: false,
+          verified: false,
+        },
+      ],
+      synced_at: "2026-05-01T10:00:00Z",
+      signature_source: "manual",
+    });
+    const id = await new Emails(http).identity("mb1");
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("GET");
+    expect(url).toMatch(/\/emails\/mb1\/identity$/);
+    expect(id.identities).toHaveLength(2);
+    expect(id.identities[1]?.verified).toBe(false);
+    expect(id.signature_source).toBe("manual");
+  });
+
+  it("refreshIdentity POSTs import_signature and sends no body when omitted", async () => {
+    const payload = {
+      supported: false,
+      provider: "smtp_imap",
+      mailbox_email: "a@acme.com",
+      send_as_email: "",
+      identities: [],
+      signature_source: "manual",
+    };
+    const { http, fetchMock } = clientWith(payload);
+    await new Emails(http).refreshIdentity("mb1", { import_signature: true });
+    let call = lastCall(fetchMock);
+    expect(call.init.method).toBe("POST");
+    expect(call.url).toMatch(/\/emails\/mb1\/identity\/refresh$/);
+    expect(JSON.parse(String(call.init.body))).toEqual({ import_signature: true });
+
+    const res = await new Emails(http).refreshIdentity("mb1");
+    call = lastCall(fetchMock);
+    expect(call.init.body).toBeUndefined();
+    expect(res.supported).toBe(false);
+  });
+
+  it("resumeSending POSTs /emails/:id/resume-sending and decodes the release flags", async () => {
+    const { http, fetchMock } = clientWith({ hold_released: true, cooldown_cleared: false });
+    const out = await new Emails(http).resumeSending("mb1");
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("POST");
+    expect(url).toMatch(/\/emails\/mb1\/resume-sending$/);
+    expect(init.body).toBeUndefined();
+    expect(out).toEqual({ hold_released: true, cooldown_cleared: false });
+  });
+
+  it("updateSync PUTs { skip_folders } and decodes the stored list", async () => {
+    const { http, fetchMock } = clientWith({ skip_folders: ["Junk"] });
+    const out = await new Emails(http).updateSync("mb1", ["Junk"]);
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("PUT");
+    expect(url).toMatch(/\/emails\/mb1\/sync$/);
+    expect(JSON.parse(String(init.body))).toEqual({ skip_folders: ["Junk"] });
+    expect(out.skip_folders).toEqual(["Junk"]);
+  });
+
+  it("sync decodes skip_folders and folders", async () => {
+    const { http } = clientWith({
+      state: null,
+      policy: { backfill_days: 30 },
+      skip_folders: [],
+      folders: [{ name: "INBOX", folder: "inbox" }],
+    });
+    const out = await new Emails(http).sync("mb1");
+    expect(out.state).toBeNull();
+    expect(out.folders?.[0]).toEqual({ name: "INBOX", folder: "inbox" });
+  });
+
+  it("bulkDelete POSTs email_ids and decodes per-row results", async () => {
+    const { http, fetchMock } = clientWith({
+      succeeded: 1,
+      failed: 1,
+      results: [
+        { id: "a", ok: true },
+        { id: "b", ok: false, code: "not_found", message: "Email not found." },
+      ],
+    });
+    const out = await new Emails(http).bulkDelete({ email_ids: ["a", "b"] });
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("POST");
+    expect(url).toMatch(/\/emails\/bulk\/delete$/);
+    expect(JSON.parse(String(init.body))).toEqual({ email_ids: ["a", "b"] });
+    expect(out.failed).toBe(1);
+    expect(out.results[1]?.code).toBe("not_found");
+  });
+
+  it("bulkStatus POSTs email_ids and status", async () => {
+    const { http, fetchMock } = clientWith({ succeeded: 2, failed: 0, results: [] });
+    await new Emails(http).bulkStatus({ email_ids: ["a", "b"], status: "inactive" });
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("POST");
+    expect(url).toMatch(/\/emails\/bulk\/status$/);
+    expect(JSON.parse(String(init.body))).toEqual({ email_ids: ["a", "b"], status: "inactive" });
+  });
+
+  it("bulkWarmup POSTs email_ids and action", async () => {
+    const { http, fetchMock } = clientWith({
+      succeeded: 1,
+      failed: 0,
+      results: [{ id: "a", ok: true }],
+    });
+    const out = await new Emails(http).bulkWarmup({ email_ids: ["a"], action: "pause" });
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("POST");
+    expect(url).toMatch(/\/emails\/bulk\/warmup$/);
+    expect(JSON.parse(String(init.body))).toEqual({ email_ids: ["a"], action: "pause" });
+    expect(out.succeeded).toBe(1);
+  });
+});
