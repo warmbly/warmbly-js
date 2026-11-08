@@ -5,6 +5,8 @@
  * Intents are a traffic filter, not a security boundary.
  */
 
+import type { PermissionName } from "../permissions";
+import { PERMISSIONS } from "../permissions";
 import type { WarmblyEventName } from "./events";
 
 /**
@@ -19,9 +21,9 @@ export const GatewayIntents = {
   AUDIT: "AUDIT",
   /** Campaign lifecycle events (`CAMPAIGN_*`). */
   CAMPAIGN: "CAMPAIGN",
-  /** Email/message events (`EMAIL_*`). */
+  /** Email/message events (`EMAIL_*`, and `DIRECT_EMAIL_*` by substring). */
   EMAIL: "EMAIL",
-  /** Contact events (`CONTACT_*`, `CONTACTS_RELOAD`). */
+  /** Contact events (`CONTACT_*`, `CONTACTS_RELOAD`, including `CONTACT_IMPORT_PROGRESS`). */
   CONTACT: "CONTACT",
   /** Hosted form events (`FORM_SUBMISSION_CREATED`). */
   FORM: "FORM",
@@ -43,6 +45,18 @@ export const GatewayIntents = {
   AI: "AI",
   /** AI contact-research progress (`AI_RESEARCH_PROGRESS`). */
   RESEARCH: "RESEARCH",
+  /** Warmup events (`WARMUP_PLACEMENT`, `WARMUP_ACTIVITY`). */
+  WARMUP: "WARMUP",
+  /** Inbox placement test events (`PLACEMENT_TEST_UPDATED`). */
+  PLACEMENT: "PLACEMENT",
+  /** Mailbox import progress (`MAILBOX_IMPORT_PROGRESS`). */
+  MAILBOX: "MAILBOX",
+  /** Mailbox and contact import progress (`MAILBOX_IMPORT_PROGRESS`, `CONTACT_IMPORT_PROGRESS`). */
+  IMPORT: "IMPORT",
+  /** Mirrored CRM changes (`CRM_SYNCED`). */
+  CRM: "CRM",
+  /** Direct (non-campaign) email tracking (`DIRECT_EMAIL_OPENED`, `DIRECT_EMAIL_CLICKED`). */
+  DIRECT: "DIRECT",
   /** Billing and AI-credit events (`BILLING_CREDITS_LOW`, `BILLING_CREDITS_CHANGED`). */
   BILLING: "BILLING",
 } as const;
@@ -83,4 +97,63 @@ export function matchesIntents(eventType: WarmblyEventName | string, intents?: s
   if (!normalized) return true;
   const upper = eventType.toUpperCase();
   return normalized.some((intent) => upper.includes(intent));
+}
+
+/**
+ * What a credential needs to receive an event: an API permission, `null` when the org
+ * channel applies no gate, or `"never"` when the event needs a member permission (team,
+ * billing, settings) that no API key or OAuth token can carry.
+ */
+export type EventScopeRequirement = PermissionName | null | "never";
+
+/**
+ * Mirrors the realtime service's per-event permission gate for an API key or OAuth token.
+ * The server maps each credential scope to the member permission it unlocks
+ * (`READ_EMAILS` to `manage_emails`, `READ_CAMPAIGNS` to `view_campaigns`, `READ_CONTACTS`
+ * to `view_contacts`, `READ_UNIBOX` to `access_unibox`, `READ_ANALYTICS` to
+ * `view_analytics`) and gates event families on those. The rules are checked in server
+ * order, so the first match wins. Unknown events are ungated (`null`), as on the server.
+ *
+ * @example
+ * requiredScopeForEvent("PLACEMENT_TEST_UPDATED"); // "READ_ANALYTICS"
+ * requiredScopeForEvent("BILLING_CREDITS_LOW"); // "never"
+ * requiredScopeForEvent("CUSTOM_EVENT"); // null
+ */
+export function requiredScopeForEvent(eventType: WarmblyEventName | string): EventScopeRequirement {
+  const t = eventType.toUpperCase();
+  const has = (...parts: string[]) => parts.some((p) => t.includes(p));
+  const inbox =
+    has("INBOX", "AI_DRAFT") || ["EMAIL_RECEIVED", "EMAIL_UPDATED", "EMAIL_DELETED"].includes(t);
+
+  if (has("SUBSCRIPTION", "BILLING", "MEMBER", "INVITATION", "SETTINGS")) return "never";
+  if (inbox) return "READ_UNIBOX";
+  if (has("DIRECT_EMAIL_", "PLACEMENT_TEST")) return "READ_ANALYTICS";
+  if (
+    has("CAMPAIGN", "TASK_PROGRESS") ||
+    ["EMAIL_SENT", "EMAIL_OPENED", "EMAIL_CLICKED", "EMAIL_REPLIED", "EMAIL_BOUNCED"].includes(t)
+  ) {
+    return "READ_CAMPAIGNS";
+  }
+  if (has("CONTACT", "PAGE_HIT", "FORM", "RESEARCH")) return "READ_CONTACTS";
+  if (has("ACCOUNT", "WARMUP", "MAILBOX_IMPORT")) return "READ_EMAILS";
+  return null;
+}
+
+/**
+ * Whether a credential holding the given permission mask is allowed to receive an event,
+ * per {@link requiredScopeForEvent}. A client-side hint: the server is authoritative, and
+ * a member restricted to selected resources is filtered further by their grants.
+ *
+ * @example
+ * credentialReceivesEvent("CRM_SYNCED", 0); // true (no gate)
+ * credentialReceivesEvent("EMAIL_OPENED", PERMISSIONS.READ_EMAILS); // false
+ */
+export function credentialReceivesEvent(
+  eventType: WarmblyEventName | string,
+  permissionMask: number,
+): boolean {
+  const need = requiredScopeForEvent(eventType);
+  if (need === null) return true;
+  if (need === "never") return false;
+  return (permissionMask & PERMISSIONS[need]) !== 0;
 }

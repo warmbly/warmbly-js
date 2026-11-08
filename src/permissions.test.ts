@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { WarmblyError } from "./core/errors";
 import {
+  APP_GRANTABLE_PERMISSIONS,
+  apiPermissionsForMember,
   PERMISSION_PRESETS,
+  PERMISSION_ROLE_NEEDS,
   PERMISSIONS,
   Permissions,
   permissionCategory,
@@ -272,5 +275,32 @@ describe("normalizeToBits errors", () => {
     expect(() => p.has("bogus" as never)).toThrow(WarmblyError);
     expect(() => p.add("bogus" as never)).toThrow(WarmblyError);
     expect(() => p.remove("bogus" as never)).toThrow(WarmblyError);
+  });
+});
+
+describe("role delegation", () => {
+  it("lists a role need for every permission", () => {
+    expect(Object.keys(PERMISSION_ROLE_NEEDS).sort()).toEqual(Object.keys(PERMISSIONS).sort());
+  });
+
+  it("delegates everything to an owner and nothing to an empty role", () => {
+    expect(apiPermissionsForMember([], true).value).toBe(PERMISSION_PRESETS.full_access);
+    expect(apiPermissionsForMember([]).toScopes()).toEqual(["realtime_subscribe"]);
+  });
+
+  it("requires every member permission an API permission lists", () => {
+    expect(apiPermissionsForMember(["view_contacts"]).has("AI_RESEARCH")).toBe(false);
+    expect(apiPermissionsForMember(["view_contacts", "use_ai"]).has("AI_RESEARCH")).toBe(true);
+    expect(apiPermissionsForMember(["view_campaigns"]).toScopes()).toEqual([
+      "read_emails",
+      "read_campaigns",
+      "realtime_subscribe",
+      "read_templates",
+    ]);
+  });
+
+  it("never grants API_KEYS to an OAuth app", () => {
+    expect((APP_GRANTABLE_PERMISSIONS & PERMISSIONS.API_KEYS) === 0).toBe(true);
+    expect(APP_GRANTABLE_PERMISSIONS | PERMISSIONS.API_KEYS).toBe(PERMISSION_PRESETS.full_access);
   });
 });

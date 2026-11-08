@@ -16,10 +16,12 @@ class FakeWebSocket implements WebSocketLike {
   closeCalls: Array<{ code?: number; reason?: string }> = [];
   readonly sent: string[] = [];
   readonly url: string;
+  readonly init: unknown;
   private readonly handlers = new Map<string, Array<(arg: unknown) => void>>();
 
-  constructor(url: string) {
+  constructor(url: string, init?: unknown) {
     this.url = url;
+    this.init = init;
     FakeWebSocket.instances.push(this);
   }
 
@@ -132,7 +134,9 @@ describe("Gateway connect handshake", () => {
 
     const socket = await connectReady(gw);
 
-    expect(socket.url).toContain("/socket/websocket?vsn=1.0.0&token=wmbly_x");
+    expect(socket.url).toContain("/socket/websocket?vsn=1.0.0");
+    expect(socket.url).not.toContain("token=");
+    expect(socket.init).toEqual({ headers: { "X-Warmbly-Token": "wmbly_x" } });
     const join = socket.frames().find((f) => f[3] === "phx_join");
     expect(join?.[2]).toBe("org:org_1");
     const joinPayload = join?.[4] as { intents: string[] } | undefined;
@@ -202,6 +206,49 @@ describe("Gateway events", () => {
     expect(custom).toHaveBeenCalledWith(
       expect.objectContaining({ name: "deal.won", payload: { id: 1 } }),
     );
+  });
+
+  it("dispatches the newer typed events and passes unknown ones through", async () => {
+    const gw = new Gateway({ orgId: "org_1", token: "t", webSocket: FakeCtor });
+    const socket = await connectReady(gw);
+    const placement = vi.fn();
+    const crm = vi.fn();
+    const any = vi.fn();
+    gw.on("PLACEMENT_TEST_UPDATED", placement);
+    gw.on("CRM_SYNCED", crm);
+    gw.onAny(any);
+    socket.message([
+      null,
+      null,
+      "org:org_1",
+      "PLACEMENT_TEST_UPDATED",
+      {
+        event_type: "PLACEMENT_TEST_UPDATED",
+        org_id: "o",
+        batch_id: "b",
+        status: "running",
+        timestamp: "t",
+        seq: 20,
+      },
+    ]);
+    socket.message([
+      null,
+      null,
+      "org:org_1",
+      "CRM_SYNCED",
+      { event_type: "CRM_SYNCED", org_id: "o", objects: ["deals"], timestamp: "t", seq: 21 },
+    ]);
+    socket.message([
+      null,
+      null,
+      "org:org_1",
+      "FUTURE_THING",
+      { event_type: "FUTURE_THING", timestamp: "t", seq: 22 },
+    ]);
+    expect(placement).toHaveBeenCalledWith(expect.objectContaining({ batch_id: "b" }));
+    expect(crm).toHaveBeenCalledWith(expect.objectContaining({ objects: ["deals"] }));
+    expect(any).toHaveBeenCalledWith("FUTURE_THING", expect.objectContaining({ seq: 22 }));
+    expect(gw.latestSeq).toBe(22);
   });
 
   it("emits presence on presence_state and presence_diff", async () => {
@@ -1280,5 +1327,50 @@ describe("Gateway join rate limiting", () => {
     const err = error.mock.calls[0][0] as GatewayError;
     expect(err.code).toBe(GatewayCloseCode.MALFORMED_TOPIC);
     expect(err.reason).toBe("malformed_topic");
+  });
+});
+
+describe("Gateway token transport", () => {
+  async function open(options: Record<string, unknown>) {
+    const gw = new Gateway({ orgId: "org_1", webSocket: FakeCtor, ...options });
+    void gw.connect().catch(() => undefined);
+    const socket = await nextSocket();
+    gw.close();
+    return socket;
+  }
+
+  it("sends OAuth access tokens in the header, never the URL", async () => {
+    const socket = await open({ token: "wmat_abc" });
+    expect(socket.url).not.toContain("wmat_abc");
+    expect(socket.init).toEqual({ headers: { "X-Warmbly-Token": "wmat_abc" } });
+  });
+
+  it("sends a connection JWT in the token query parameter without headers", async () => {
+    const socket = await open({ token: "eyJhbGciOi.payload.sig" });
+    expect(socket.url).toContain("&token=eyJhbGciOi.payload.sig");
+    expect(socket.init).toBeUndefined();
+  });
+
+  it("honors an explicit query transport for self-hosted gateways", async () => {
+    const socket = await open({ token: "wmbly_x", tokenTransport: "query" });
+    expect(socket.url).toContain("&token=wmbly_x");
+    expect(socket.init).toBeUndefined();
+  });
+
+  it("honors an explicit header transport for any token shape", async () => {
+    const socket = await open({ token: "custom", tokenTransport: "header" });
+    expect(socket.url).not.toContain("token=");
+    expect(socket.init).toEqual({ headers: { "X-Warmbly-Token": "custom" } });
+  });
+
+  it("falls back to the query string in a browser, which cannot set headers", async () => {
+    (globalThis as { document?: unknown }).document = {};
+    try {
+      const socket = await open({ token: "wmbly_x" });
+      expect(socket.url).toContain("&token=wmbly_x");
+      expect(socket.init).toBeUndefined();
+    } finally {
+      delete (globalThis as { document?: unknown }).document;
+    }
   });
 });
