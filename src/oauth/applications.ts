@@ -47,7 +47,7 @@ export class OAuthApplications {
    * Lists the organization's OAuth applications.
    *
    * @example
-   * const apps = await warmbly.oauth.applications.list();
+   * const apps = await warmbly.oauthApplications.list();
    */
   async list(): Promise<OAuthApplication[]> {
     const payload = await this.http.get<
@@ -60,7 +60,7 @@ export class OAuthApplications {
    * Creates an OAuth application. The response includes the `client_secret` exactly once.
    *
    * @example
-   * const app = await warmbly.oauth.applications.create({
+   * const app = await warmbly.oauthApplications.create({
    *   name: "My App",
    *   redirect_uris: ["https://app.example.com/callback"],
    *   scopes: 6,
@@ -74,7 +74,7 @@ export class OAuthApplications {
    * Fetches a single OAuth application by id.
    *
    * @example
-   * const app = await warmbly.oauth.applications.get("wmcid_...");
+   * const app = await warmbly.oauthApplications.get("wmcid_...");
    */
   async get(id: string): Promise<OAuthApplication> {
     return this.http.get<OAuthApplication>(`/oauth/applications/${encodeURIComponent(id)}`);
@@ -84,7 +84,7 @@ export class OAuthApplications {
    * Updates an OAuth application.
    *
    * @example
-   * const app = await warmbly.oauth.applications.update("wmcid_...", { name: "Renamed" });
+   * const app = await warmbly.oauthApplications.update("wmcid_...", { name: "Renamed" });
    */
   async update(id: string, body: Partial<OAuthApplicationWrite>): Promise<OAuthApplication> {
     return this.http.patch<OAuthApplication>(`/oauth/applications/${encodeURIComponent(id)}`, {
@@ -96,7 +96,7 @@ export class OAuthApplications {
    * Deletes an OAuth application. The server answers `{ deleted: true }`.
    *
    * @example
-   * await warmbly.oauth.applications.delete("wmcid_...");
+   * await warmbly.oauthApplications.delete("wmcid_...");
    */
   async delete(id: string): Promise<{ deleted: boolean }> {
     return this.http.delete<{ deleted: boolean }>(`/oauth/applications/${encodeURIComponent(id)}`);
@@ -107,7 +107,7 @@ export class OAuthApplications {
    * answers `{ client_secret }` only, not the application.
    *
    * @example
-   * const { client_secret } = await warmbly.oauth.applications.rotateSecret("wmcid_...");
+   * const { client_secret } = await warmbly.oauthApplications.rotateSecret("wmcid_...");
    */
   async rotateSecret(id: string): Promise<{ client_secret: string }> {
     return this.http.post<{ client_secret: string }>(
@@ -140,7 +140,7 @@ export class OAuthApplications {
    * and for suspended apps.
    *
    * @example
-   * const app = await warmbly.oauth.applications.setLogo("app_1", file, "logo.png");
+   * const app = await warmbly.oauthApplications.setLogo("app_1", file, "logo.png");
    * console.log(app.logo_url);
    */
   async setLogo(id: string, file: Blob, filename?: string): Promise<OAuthApplication> {
@@ -159,7 +159,7 @@ export class OAuthApplications {
    * application. Needs `API_KEYS`; refused for OAuth tokens and for suspended apps.
    *
    * @example
-   * const app = await warmbly.oauth.applications.deleteLogo("app_1");
+   * const app = await warmbly.oauthApplications.deleteLogo("app_1");
    */
   async deleteLogo(id: string): Promise<OAuthApplication> {
     return this.http.delete<OAuthApplication>(`/oauth/applications/${encodeURIComponent(id)}/logo`);
@@ -170,7 +170,7 @@ export class OAuthApplications {
    * is not published. Needs `API_KEYS`; refused for OAuth tokens.
    *
    * @example
-   * const { listing } = await warmbly.oauth.applications.getListing("app_1");
+   * const { listing } = await warmbly.oauthApplications.getListing("app_1");
    */
   async getListing(id: string): Promise<{ listing: AppListing | null }> {
     return this.http.get<{ listing: AppListing | null }>(
@@ -184,7 +184,7 @@ export class OAuthApplications {
    * `invalid_listing`, 400 `app_not_listable`, 409 `listing_slug_taken`. Needs `API_KEYS`.
    *
    * @example
-   * const { listing } = await warmbly.oauth.applications.putListing("app_1", {
+   * const { listing } = await warmbly.oauthApplications.putListing("app_1", {
    *   slug: "acme-sync",
    *   tagline: "Push positive replies into Acme as deals",
    *   category: "crm",
@@ -203,7 +203,7 @@ export class OAuthApplications {
    * listing, so it is safe to retry. Needs `API_KEYS`; refused for OAuth tokens.
    *
    * @example
-   * await warmbly.oauth.applications.deleteListing("app_1");
+   * await warmbly.oauthApplications.deleteListing("app_1");
    */
   async deleteListing(id: string): Promise<{ deleted: boolean }> {
     return this.http.delete<{ deleted: boolean }>(
@@ -215,7 +215,7 @@ export class OAuthApplications {
    * Returns the application's webhook signing secret.
    *
    * @example
-   * const { webhook_secret } = await warmbly.oauth.applications.getWebhookSecret("wmcid_...");
+   * const { webhook_secret } = await warmbly.oauthApplications.getWebhookSecret("wmcid_...");
    */
   async getWebhookSecret(id: string): Promise<{ webhook_secret: string }> {
     return this.http.get<{ webhook_secret: string }>(
@@ -227,7 +227,7 @@ export class OAuthApplications {
    * Rotates the application's webhook signing secret.
    *
    * @example
-   * const { webhook_secret } = await warmbly.oauth.applications.rotateWebhookSecret("wmcid_...");
+   * const { webhook_secret } = await warmbly.oauthApplications.rotateWebhookSecret("wmcid_...");
    */
   async rotateWebhookSecret(id: string): Promise<{ webhook_secret: string }> {
     return this.http.post<{ webhook_secret: string }>(
@@ -239,7 +239,7 @@ export class OAuthApplications {
    * Lists the health of the application's configured webhook endpoints.
    *
    * @example
-   * const { endpoints } = await warmbly.oauth.applications.listWebhookEndpoints("wmcid_...");
+   * const { endpoints } = await warmbly.oauthApplications.listWebhookEndpoints("wmcid_...");
    */
   async listWebhookEndpoints(id: string): Promise<{ endpoints: WebhookEndpointHealth[] }> {
     return this.http.get<{ endpoints: WebhookEndpointHealth[] }>(
@@ -251,7 +251,7 @@ export class OAuthApplications {
    * Lists the application's webhook deliveries as an auto-paginating page.
    *
    * @example
-   * const page = await warmbly.oauth.applications.listWebhookDeliveries("wmcid_...", {
+   * const page = await warmbly.oauthApplications.listWebhookDeliveries("wmcid_...", {
    *   status: "failed",
    * });
    * for await (const delivery of page) console.log(delivery.id);
@@ -273,7 +273,7 @@ export class OAuthApplications {
    * cannot be called with an API key or an OAuth access token.
    *
    * @example
-   * const apps = await warmbly.oauth.applications.listAuthorizedApps();
+   * const apps = await warmbly.oauthApplications.listAuthorizedApps();
    */
   async listAuthorizedApps(): Promise<AuthorizedApp[]> {
     const payload = await this.http.get<
@@ -290,7 +290,7 @@ export class OAuthApplications {
    * cannot be called with an API key or an OAuth access token.
    *
    * @example
-   * await warmbly.oauth.applications.revokeAuthorizedApp("app_1");
+   * await warmbly.oauthApplications.revokeAuthorizedApp("app_1");
    */
   async revokeAuthorizedApp(applicationId: string): Promise<{ revoked: boolean }> {
     return this.http.delete<{ revoked: boolean }>(
@@ -305,7 +305,7 @@ export class OAuthApplications {
    * Note: this endpoint is dashboard-only (JWT session).
    *
    * @example
-   * const auths = await warmbly.oauth.applications.listWorkspaceAuthorizations();
+   * const auths = await warmbly.oauthApplications.listWorkspaceAuthorizations();
    */
   async listWorkspaceAuthorizations(): Promise<WorkspaceAuthorization[]> {
     const payload = await this.http.get<{ authorizations?: WorkspaceAuthorization[] }>(
@@ -321,7 +321,7 @@ export class OAuthApplications {
    * Note: this endpoint is dashboard-only (JWT session).
    *
    * @example
-   * await warmbly.oauth.applications.revokeWorkspaceAuthorization("app_1", "user_1");
+   * await warmbly.oauthApplications.revokeWorkspaceAuthorization("app_1", "user_1");
    */
   async revokeWorkspaceAuthorization(
     applicationId: string,
