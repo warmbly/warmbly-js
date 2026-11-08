@@ -516,6 +516,16 @@ describe("Campaigns: estimate, duplicate, forms, segments, start options", () =>
     expect(est.scenarios?.[0]?.finish_at).toBeNull();
   });
 
+  it("createStep treats a request-options-only second argument as options", async () => {
+    const { http, fetchMock } = clientWith({ id: "s1" });
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      new Campaigns(http).createStep("c1", { signal: controller.signal }),
+    ).rejects.toBeDefined();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("createStep sends the optional step body including thread_reply", async () => {
     const { http, fetchMock } = clientWith({ id: "s2", thread_reply: false });
     const step = await new Campaigns(http).createStep("c1", {

@@ -972,7 +972,7 @@ export interface SalesforceImportSource {
   object: string;
   source_id: string;
   source_label: string;
-  campaign_id?: string;
+  campaign_id?: string | null;
   category_ids: string[];
   recurring: boolean;
   enabled: boolean;

@@ -989,9 +989,14 @@ export class Campaigns extends APIResource {
    */
   createStep(
     id: string,
-    params?: UpdateCampaignStepParams,
+    params?: UpdateCampaignStepParams | RequestOptions,
     opts?: RequestOptions,
   ): Promise<CampaignStep> {
+    // Before step bodies existed the second argument was RequestOptions. Keep those calls
+    // working: an object made only of request-option keys is options, not step data.
+    if (!opts && params && isOnlyRequestOptions(params)) {
+      return this.http.post<CampaignStep>(this.path("campaigns", id, "steps"), params);
+    }
     return this.http.post<CampaignStep>(this.path("campaigns", id, "steps"), {
       ...opts,
       body: params,
@@ -1220,4 +1225,20 @@ export class Campaigns extends APIResource {
   deletePlacementMonitor(id: string, opts?: RequestOptions): Promise<void> {
     return this.http.delete<void>(this.path("campaigns", id, "placement-monitor"), opts);
   }
+}
+
+const REQUEST_OPTION_KEYS = new Set([
+  "query",
+  "body",
+  "headers",
+  "idempotencyKey",
+  "signal",
+  "timeout",
+  "maxRetries",
+  "form",
+]);
+
+function isOnlyRequestOptions(value: object): value is RequestOptions {
+  const keys = Object.keys(value);
+  return keys.length > 0 && keys.every((key) => REQUEST_OPTION_KEYS.has(key));
 }
