@@ -60,6 +60,6 @@ console.log("score", score);
 
 // Reorder how templates appear in the UI by passing the desired id order.
 const reordered = await warmbly.templates.reorder({
-  order: [copy.id, template.id],
+  ids: [copy.id, template.id],
 });
 console.log("reordered", reordered);

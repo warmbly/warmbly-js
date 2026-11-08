@@ -63,10 +63,12 @@ class FakeWebSocket implements WebSocketLike {
   readyState = WS_READY_STATE.CONNECTING;
   readonly sent: string[] = [];
   readonly url: string;
+  readonly init: unknown;
   private readonly handlers = new Map<string, Array<(arg: unknown) => void>>();
 
-  constructor(url: string) {
+  constructor(url: string, init?: unknown) {
     this.url = url;
+    this.init = init;
     FakeWebSocket.instances.push(this);
   }
 
@@ -222,7 +224,7 @@ describe("Warmbly.gateway", () => {
     const { warmbly } = clientWith({}, {}, { apiKey: "wmbly_inherited" });
     const gw = warmbly.gateway({ orgId: "org_1", webSocket: FakeCtor });
     const socket = await openedSocket(gw);
-    expect(socket.url).toContain("token=wmbly_inherited");
+    expect(socket.init).toEqual({ headers: { "X-Warmbly-Token": "wmbly_inherited" } });
     expect(socket.url).toContain("wss://realtime.warmbly.com/socket/websocket");
     expect(joinTopic(socket)).toBe("org:org_1");
   });
@@ -280,7 +282,7 @@ describe("Warmbly.gateway", () => {
       webSocket: FakeCtor,
     });
     const socket = await openedSocket(gw);
-    expect(socket.url).toContain("token=wmbly_explicit");
+    expect(socket.init).toEqual({ headers: { "X-Warmbly-Token": "wmbly_explicit" } });
     expect(socket.url).not.toContain("wmbly_inherited");
   });
 
@@ -293,7 +295,7 @@ describe("Warmbly.gateway", () => {
       webSocket: FakeCtor,
     });
     const socket = await openedSocket(gw);
-    expect(socket.url).toContain("token=wmbly_caller_token");
+    expect(socket.init).toEqual({ headers: { "X-Warmbly-Token": "wmbly_caller_token" } });
   });
 
   it("throws a GatewayError through the inherited provider when no credential is set", async () => {

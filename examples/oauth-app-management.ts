@@ -94,17 +94,17 @@ for await (const delivery of deliveries) {
 }
 
 // 9. List the applications the current user has authorized, then revoke one.
-// Each entry's `id` is the authorization (grant) id used to revoke access.
+// Each entry's `application_id` is the id used to revoke access.
 const authorized = await warmbly.oauthApplications.listAuthorizedApps();
 console.log(`User has authorized ${authorized.length} app(s).`);
 for (const grant of authorized) {
-  console.log(` - ${grant.name ?? grant.client_id ?? grant.id} scopes=${grant.scopes?.join(",")}`);
+  console.log(` - ${grant.name ?? grant.application_id} scopes=${grant.scopes}`);
 }
 
 // Revoke the first authorized grant, if any. After this the app can no longer act on the
 // user's behalf and must be re-authorized.
 const first = authorized[0];
 if (first) {
-  await warmbly.oauthApplications.revokeAuthorizedApp(first.id);
-  console.log("Revoked authorized app:", first.id);
+  await warmbly.oauthApplications.revokeAuthorizedApp(first.application_id);
+  console.log("Revoked authorized app:", first.application_id);
 }
