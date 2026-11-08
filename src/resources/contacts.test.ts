@@ -163,36 +163,381 @@ describe("Contacts", () => {
     expect(init.body).toBeUndefined();
   });
 
-  it("importPreview() POSTs to /contacts/import/preview", async () => {
-    const { http, fetchMock } = clientWithSequence([{ body: { valid: 10, invalid: 0 } }]);
-    const result = await new Contacts(http).importPreview({ upload_id: "u_1" });
-    expect(result).toEqual({ valid: 10, invalid: 0 });
+  it("importPreview() uploads the file as multipart under `file`", async () => {
+    const preview = {
+      filename: "leads.csv",
+      format: "csv",
+      total_rows: 2,
+      columns: ["Email", "Name"],
+      has_header: true,
+      sample_rows: [["a@x.io", "A"]],
+      suggested_mapping: [{ index: 0, target: "email" }],
+      inferred_columns: [1],
+      mapping_source: "saved",
+    };
+    const { http, fetchMock } = clientWithSequence([{ body: preview }]);
+    const file = new Blob(["Email,Name\na@x.io,A"], { type: "text/csv" });
+    const result = await new Contacts(http).importPreview(file, { filename: "leads.csv" });
+    expect(result.mapping_source).toBe("saved");
     const { url, init } = callAt(fetchMock, 0);
     expect(init.method).toBe("POST");
     expect(url).toContain("/contacts/import/preview");
-    expect(JSON.parse(String(init.body))).toEqual({ upload_id: "u_1" });
+    expect(init.body).toBeInstanceOf(FormData);
+    const sent = (init.body as FormData).get("file") as File;
+    expect(sent.name).toBe("leads.csv");
   });
 
-  it("importCommit() POSTs to /contacts/import/commit", async () => {
-    const { http, fetchMock } = clientWithSequence([{ body: { imported: 10 } }]);
-    const result = await new Contacts(http).importCommit({ upload_id: "u_1" });
-    expect(result).toEqual({ imported: 10 });
+  it("importCommit() sends the file plus a JSON `options` field", async () => {
+    const { http, fetchMock } = clientWithSequence([
+      {
+        body: {
+          total: 10,
+          imported: 8,
+          updated: 1,
+          skipped: 1,
+          failed: 0,
+          started_at: "2026-11-08T10:00:00Z",
+          ended_at: "2026-11-08T10:00:01Z",
+          segments_pinned: true,
+        },
+      },
+    ]);
+    const options = {
+      mapping: [{ index: 0, target: "email" }],
+      has_header: true,
+      dedup: "update",
+      segment_ids: ["seg_1"],
+    };
+    const result = await new Contacts(http).importCommit(new Blob(["x"]), options);
+    expect(result.imported).toBe(8);
     const { url, init } = callAt(fetchMock, 0);
     expect(init.method).toBe("POST");
     expect(url).toContain("/contacts/import/commit");
-    expect(JSON.parse(String(init.body))).toEqual({ upload_id: "u_1" });
+    const form = init.body as FormData;
+    expect(form.get("file")).toBeInstanceOf(Blob);
+    expect(JSON.parse(String(form.get("options")))).toEqual(options);
   });
 
-  it("lookup() GETs /contacts/lookup with a query string", async () => {
+  const importRow = {
+    id: "imp_1",
+    organization_id: "org_1",
+    filename: "leads.csv",
+    format: "csv",
+    status: "draft",
+    has_header: true,
+    columns: ["Email"],
+    total: 100,
+    processed: 0,
+    imported: 0,
+    updated: 0,
+    skipped: 0,
+    failed: 0,
+    notes: [],
+    created_at: "2026-11-08T10:00:00Z",
+    updated_at: "2026-11-08T10:00:00Z",
+    preview: {
+      filename: "leads.csv",
+      format: "csv",
+      total_rows: 100,
+      columns: ["Email"],
+      has_header: true,
+      sample_rows: [["a@x.io"]],
+      suggested_mapping: [{ index: 0, target: "email" }],
+    },
+  };
+
+  it("createImport() uploads multipart to /contacts/imports", async () => {
+    const { http, fetchMock } = clientWithSequence([{ body: importRow, status: 201 }]);
+    const imp = await new Contacts(http).createImport(new Blob(["Email\na@x.io"]), {
+      filename: "leads.csv",
+    });
+    expect(imp.status).toBe("draft");
+    expect(imp.preview?.total_rows).toBe(100);
+    const { url, init } = callAt(fetchMock, 0);
+    expect(init.method).toBe("POST");
+    expect(url).toContain("/contacts/imports");
+    expect((init.body as FormData).get("file")).toBeInstanceOf(Blob);
+  });
+
+  it("listImports() pages with cursor and limit", async () => {
     const { http, fetchMock } = clientWithSequence([
-      { body: { id: "c_1", email: "team@warmbly.com" } },
+      {
+        body: {
+          data: [importRow],
+          pagination: { total: null, next_cursor: "cur_2", has_more: true },
+        },
+      },
+      {
+        body: {
+          data: [
+            { ...importRow, id: "imp_2", status: "completed", finished_at: "2026-11-08T11:00:00Z" },
+          ],
+          pagination: { total: null, next_cursor: null, has_more: false },
+        },
+      },
     ]);
-    const result = await new Contacts(http).lookup({ email: "team@warmbly.com" });
-    expect(result).toEqual({ id: "c_1", email: "team@warmbly.com" });
+    const ids: string[] = [];
+    for await (const imp of await new Contacts(http).listImports({ limit: 1 })) ids.push(imp.id);
+    expect(ids).toEqual(["imp_1", "imp_2"]);
+    const first = callAt(fetchMock, 0);
+    expect(first.init.method).toBe("GET");
+    expect(first.url).toContain("/contacts/imports");
+    expect(first.url).toContain("limit=1");
+    expect(callAt(fetchMock, 1).url).toContain("cursor=cur_2");
+  });
+
+  it("getImport() GETs one import by id", async () => {
+    const { http, fetchMock } = clientWithSequence([
+      {
+        body: {
+          ...importRow,
+          status: "failed",
+          error: "boom",
+          failures: [{ line: 3, email: "bad", reason: "invalid address" }],
+          quality: { malformed: 1, disposable: 0, role: 0, bad_share_pct: 1, flagged: false },
+        },
+      },
+    ]);
+    const imp = await new Contacts(http).getImport("imp_1");
+    expect(imp.failures?.[0]?.line).toBe(3);
+    const { url, init } = callAt(fetchMock, 0);
+    expect(init.method).toBe("GET");
+    expect(url).toContain("/contacts/imports/imp_1");
+  });
+
+  it("saveImportDraft() PATCHes the options", async () => {
+    const { http, fetchMock } = clientWithSequence([{ body: importRow }]);
+    const options = { mapping: [{ index: 0, target: "email" }], has_header: true, dedup: "skip" };
+    await new Contacts(http).saveImportDraft("imp_1", options);
+    const { url, init } = callAt(fetchMock, 0);
+    expect(init.method).toBe("PATCH");
+    expect(url).toContain("/contacts/imports/imp_1");
+    expect(JSON.parse(String(init.body))).toEqual(options);
+  });
+
+  it("analyzeImport() POSTs mapping and has_header and decodes the analysis", async () => {
+    const { http, fetchMock } = clientWithSequence([
+      {
+        body: {
+          rows: 100,
+          new: 80,
+          existing: 10,
+          duplicates_in_file: 5,
+          invalid: 4,
+          conflicts: 1,
+          invalid_samples: [{ line: 7, reason: "no address" }],
+          problem: "over the contact limit",
+        },
+      },
+    ]);
+    const a = await new Contacts(http).analyzeImport("imp_1", {
+      mapping: [{ index: 0, target: "email" }],
+      has_header: true,
+    });
+    expect(a.new).toBe(80);
+    expect(a.problem).toBe("over the contact limit");
+    const { url, init } = callAt(fetchMock, 0);
+    expect(init.method).toBe("POST");
+    expect(url).toContain("/contacts/imports/imp_1/analyze");
+    expect(JSON.parse(String(init.body))).toEqual({
+      mapping: [{ index: 0, target: "email" }],
+      has_header: true,
+    });
+  });
+
+  it("startImport() and cancelImport() POST to their paths", async () => {
+    const { http, fetchMock } = clientWithSequence([
+      { body: { ...importRow, status: "queued" } },
+      { body: { ...importRow, status: "cancelled" } },
+    ]);
+    const options = { mapping: [{ index: 0, target: "email" }], has_header: true };
+    const started = await new Contacts(http).startImport("imp_1", options);
+    expect(started.status).toBe("queued");
+    const a = callAt(fetchMock, 0);
+    expect(a.init.method).toBe("POST");
+    expect(a.url).toContain("/contacts/imports/imp_1/start");
+    expect(JSON.parse(String(a.init.body))).toEqual(options);
+    const cancelled = await new Contacts(http).cancelImport("imp_1");
+    expect(cancelled.status).toBe("cancelled");
+    const b = callAt(fetchMock, 1);
+    expect(b.init.method).toBe("POST");
+    expect(b.url).toContain("/contacts/imports/imp_1/cancel");
+    expect(b.init.body).toBeUndefined();
+  });
+
+  it("importFailuresCsv() returns the CSV as text", async () => {
+    const csv = "line,email,reason\n3,bad,invalid address\n";
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(csv, { status: 200, headers: { "content-type": "text/csv; charset=utf-8" } }),
+    );
+    const http = new HttpClient(
+      resolveClientOptions({ apiKey: "wmbly_test", fetch: fetchMock as unknown as FetchLike }),
+    );
+    const out = await new Contacts(http).importFailuresCsv("imp_1");
+    expect(out).toBe(csv);
+    const { url, init } = callAt(fetchMock, 0);
+    expect(init.method).toBe("GET");
+    expect(url).toContain("/contacts/imports/imp_1/failed.csv");
+  });
+
+  it("lookup() GETs /contacts/lookup and decodes {contact, match}", async () => {
+    const { http, fetchMock } = clientWithSequence([
+      { body: { contact: { id: "c_1", email: "team@warmbly.com" }, match: "thread" } },
+    ]);
+    const result = await new Contacts(http).lookup({
+      email: "team@warmbly.com",
+      thread_id: "th_1",
+      account_id: "acc_1",
+    });
+    expect(result.contact?.id).toBe("c_1");
+    expect(result.match).toBe("thread");
     const { url, init } = callAt(fetchMock, 0);
     expect(init.method).toBe("GET");
     expect(url).toContain("/contacts/lookup");
     expect(url).toContain("email=team%40warmbly.com");
+    expect(url).toContain("thread_id=th_1");
+    expect(url).toContain("account_id=acc_1");
+  });
+
+  it("lookup() decodes an unknown sender as contact null", async () => {
+    const { http } = clientWithSequence([{ body: { contact: null } }]);
+    const result = await new Contacts(http).lookup({ email: "nobody@x.io" });
+    expect(result.contact).toBeNull();
+    expect(result.match).toBeUndefined();
+  });
+
+  it("bulkDelete() sends a bare id array or a selection object", async () => {
+    const { http, fetchMock } = clientWithSequence([{ body: undefined, status: 204 }]);
+    await new Contacts(http).bulkDelete(["c_1", "c_2"]);
+    const a = callAt(fetchMock, 0);
+    expect(a.init.method).toBe("DELETE");
+    expect(JSON.parse(String(a.init.body))).toEqual(["c_1", "c_2"]);
+    await new Contacts(http).bulkDelete({
+      all: true,
+      filters: { query: "acme" },
+      exclude: ["c_9"],
+    });
+    expect(JSON.parse(String(callAt(fetchMock, 1).init.body))).toEqual({
+      all: true,
+      filters: { query: "acme" },
+      exclude: ["c_9"],
+    });
+  });
+
+  it("bulkUpdate() PATCHes a selection plus edits", async () => {
+    const { http, fetchMock } = clientWithSequence([{ body: { updated: 2 } }]);
+    await new Contacts(http).bulkUpdate({
+      contacts: ["c_1"],
+      add_campaigns: ["camp_1"],
+      skip_active_in_other_campaigns: true,
+    });
+    const { init } = callAt(fetchMock, 0);
+    expect(init.method).toBe("PATCH");
+    expect(JSON.parse(String(init.body))).toEqual({
+      contacts: ["c_1"],
+      add_campaigns: ["camp_1"],
+      skip_active_in_other_campaigns: true,
+    });
+  });
+
+  it("requestVerification() accepts a select-all selection and decodes verifier fields", async () => {
+    const { http, fetchMock } = clientWithSequence([
+      {
+        body: {
+          affected: 500,
+          action: "verify",
+          queued: true,
+          verifier: "builtin",
+          verifier_error: "key expired",
+        },
+      },
+    ]);
+    const res = await new Contacts(http).requestVerification({
+      action: "verify",
+      all: true,
+      filters: { verification_status: "unknown" },
+    });
+    expect(res.verifier_error).toBe("key expired");
+    expect(JSON.parse(String(callAt(fetchMock, 0).init.body))).toEqual({
+      action: "verify",
+      all: true,
+      filters: { verification_status: "unknown" },
+    });
+  });
+
+  const panel = {
+    connections: [
+      {
+        id: "conn_1",
+        label: "Prod",
+        environment: "production",
+        instance_url: "https://x.my.salesforce.com",
+      },
+    ],
+    records: [
+      {
+        link_id: "link_1",
+        connection_id: "conn_1",
+        connection_label: "Prod",
+        object: "Lead",
+        id: "00Q1",
+        url: "https://x.my.salesforce.com/00Q1",
+        name: "Ada Lovelace",
+        status: "Working",
+        is_converted: false,
+        opted_out: false,
+        opportunities: [],
+        tasks: [
+          {
+            id: "t1",
+            subject: "Email: Hi",
+            status: "Completed",
+            url: "https://x/t1",
+            from_warmbly: true,
+          },
+        ],
+        linked_by: "email_match",
+        sync: { pending: 0, failed: 1, synced: 3, last_error: "rate limited" },
+        stale: false,
+      },
+    ],
+    can_sync: true,
+  };
+
+  it("salesforce() GETs the contact panel", async () => {
+    const { http, fetchMock } = clientWithSequence([{ body: panel }]);
+    const res = await new Contacts(http).salesforce("c_1");
+    expect(res.records[0]?.link_id).toBe("link_1");
+    expect(res.records[0]?.sync.failed).toBe(1);
+    const { url, init } = callAt(fetchMock, 0);
+    expect(init.method).toBe("GET");
+    expect(url).toContain("/contacts/c_1/salesforce");
+  });
+
+  it("syncSalesforce() POSTs connection_id and create_as, or no body", async () => {
+    const { http, fetchMock } = clientWithSequence([{ body: panel }]);
+    await new Contacts(http).syncSalesforce("c_1", {
+      connection_id: "conn_1",
+      create_as: "contact",
+    });
+    const a = callAt(fetchMock, 0);
+    expect(a.init.method).toBe("POST");
+    expect(a.url).toContain("/contacts/c_1/salesforce/sync");
+    expect(JSON.parse(String(a.init.body))).toEqual({
+      connection_id: "conn_1",
+      create_as: "contact",
+    });
+    await new Contacts(http).syncSalesforce("c_1");
+    expect(callAt(fetchMock, 1).init.body).toBeUndefined();
+  });
+
+  it("unlinkSalesforce() DELETEs the link and tolerates 204", async () => {
+    const { http, fetchMock } = clientWithSequence([{ body: undefined, status: 204 }]);
+    await new Contacts(http).unlinkSalesforce("c_1", "link_1");
+    const { url, init } = callAt(fetchMock, 0);
+    expect(init.method).toBe("DELETE");
+    expect(url).toContain("/contacts/c_1/salesforce/links/link_1");
   });
 
   it("get() GETs the contact by encoded id", async () => {
