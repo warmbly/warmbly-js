@@ -43,6 +43,30 @@ afterEach(() => {
 });
 
 describe("HttpClient", () => {
+  it("sends organizationId as the Warmbly-Organization header for agency keys", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ data: [] }));
+    const client = makeClient(fetchImpl, {
+      apiKey: "wmagency_test",
+      organizationId: "8f8a2a8e-0000-4000-8000-000000000001",
+    });
+    await client.get("campaigns");
+    expect(headersOf(fetchImpl.mock.calls[0] as never)["Warmbly-Organization"]).toBe(
+      "8f8a2a8e-0000-4000-8000-000000000001",
+    );
+    await client.get("campaigns", { organizationId: "org_other" });
+    expect(headersOf(fetchImpl.mock.calls[1])["Warmbly-Organization"]).toBe("org_other");
+    await client.get("campaigns", { headers: { "warmbly-organization": "org_header" } });
+    const third = headersOf(fetchImpl.mock.calls[2]);
+    expect(third["warmbly-organization"]).toBe("org_header");
+    expect(third["Warmbly-Organization"]).toBeUndefined();
+  });
+
+  it("sends no Warmbly-Organization header without an organizationId", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({}));
+    await makeClient(fetchImpl).get("me");
+    expect(headersOf(fetchImpl.mock.calls[0])["Warmbly-Organization"]).toBeUndefined();
+  });
+
   it("attaches the bearer token and parses JSON", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ id: "1" }));
     const client = makeClient(fetchImpl);

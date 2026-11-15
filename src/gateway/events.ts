@@ -441,6 +441,7 @@ export interface WarmblyEventMap {
   CAMPAIGN_UPDATED: CampaignEvent;
   CAMPAIGN_DELETED: CampaignEvent;
   CAMPAIGN_STARTED: CampaignEvent;
+  /** A campaign paused: by a person, or on its own (for example the deliverability breaker), with `status: "paused"`. */
   CAMPAIGN_PAUSED: CampaignEvent;
   CAMPAIGN_COMPLETED: CampaignEvent;
   /** A continuous campaign ran out of leads and is waiting for more (status stays `active`). */
@@ -451,6 +452,7 @@ export interface WarmblyEventMap {
   EMAIL_CLICKED: EmailEvent;
   EMAIL_REPLIED: EmailEvent;
   EMAIL_RECEIVED: EmailEvent;
+  /** A bounce or complaint was recorded against a campaign send after it went out: `campaign_id`, `contact_id`, `contact_email`, `step_id`. */
   EMAIL_BOUNCED: EmailEvent;
   EMAIL_UPDATED: EmailEvent;
   EMAIL_DELETED: EmailEvent;

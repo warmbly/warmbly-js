@@ -35,6 +35,22 @@ export const PERMISSIONS = {
   WARMUP_ROUTING: 2097152,
   AI_AGENT: 4194304,
   AI_RESEARCH: 8388608,
+  /** Connect mailboxes with their credentials and create sign-in links (Partnership plan). */
+  CONNECT_EMAILS: 16777216,
+  /** Create, share and schedule client reports. */
+  MANAGE_REPORTS: 33554432,
+  /** Agency keys only: view the agency, its staff, clients, overview, inbox and brand. */
+  AGENCY_READ: 67108864,
+  /** Agency keys only: create, attach, cap and detach client workspaces. */
+  AGENCY_MANAGE_CLIENTS: 134217728,
+  /** Agency keys only: view the shared send pool and AI balance. */
+  AGENCY_READ_USAGE: 268435456,
+  /** Agency keys only: move AI balance from the agency into a client workspace. */
+  AGENCY_TRANSFER_AI: 536870912,
+  /** Migrate data in from another outreach tool. */
+  IMPORT_TOOLS: 1073741824,
+  /** Agency keys only: migrate client accounts in from another outreach tool. */
+  AGENCY_MIGRATE: 2147483648,
 } as const;
 
 /** A permission name, e.g. `"READ_CAMPAIGNS"`. */
@@ -44,7 +60,7 @@ export type PermissionName = keyof typeof PERMISSIONS;
 export type Scope = Lowercase<PermissionName>;
 
 /** A permission category as returned by the permissions catalog. */
-export type PermissionCategory = "read" | "write" | "bulk" | "special";
+export type PermissionCategory = "read" | "write" | "bulk" | "special" | "agency";
 
 /** Anything accepted where a set of permissions is expected. */
 export type PermissionInput = number | PermissionName | Scope | Permissions;
@@ -74,7 +90,52 @@ const CATEGORY: Record<PermissionName, PermissionCategory> = {
   WARMUP_ROUTING: "special",
   AI_AGENT: "special",
   AI_RESEARCH: "special",
+  CONNECT_EMAILS: "special",
+  MANAGE_REPORTS: "write",
+  IMPORT_TOOLS: "bulk",
+  AGENCY_READ: "agency",
+  AGENCY_MANAGE_CLIENTS: "agency",
+  AGENCY_READ_USAGE: "agency",
+  AGENCY_TRANSFER_AI: "agency",
+  AGENCY_MIGRATE: "agency",
 };
+
+// Masks reach bit 31 and beyond, past what JavaScript's 32-bit bitwise operators handle,
+// so every mask operation works on a high and a low 32-bit half.
+const HIGH = 2 ** 32;
+
+function split(value: number): [number, number] {
+  return [Math.floor(value / HIGH), value % HIGH];
+}
+
+function join(high: number, low: number): number {
+  return high * HIGH + (low >>> 0);
+}
+
+/** Bitwise OR of two permission masks, safe above bit 31. */
+export function maskOr(a: number, b: number): number {
+  const [ah, al] = split(a);
+  const [bh, bl] = split(b);
+  return join((ah | bh) >>> 0, (al | bl) >>> 0);
+}
+
+/** Bitwise AND of two permission masks, safe above bit 31. */
+export function maskAnd(a: number, b: number): number {
+  const [ah, al] = split(a);
+  const [bh, bl] = split(b);
+  return join((ah & bh) >>> 0, (al & bl) >>> 0);
+}
+
+/** `a` with every bit of `b` cleared, safe above bit 31. */
+export function maskWithout(a: number, b: number): number {
+  const [ah, al] = split(a);
+  const [bh, bl] = split(b);
+  return join((ah & ~bh) >>> 0, (al & ~bl) >>> 0);
+}
+
+function orAll(names: readonly PermissionName[]): number {
+  return names.reduce((mask, name) => maskOr(mask, PERMISSIONS[name]), 0);
+}
 
 const PERMISSION_NAMES = Object.keys(PERMISSIONS) as PermissionName[];
 
@@ -88,19 +149,53 @@ export function permissionToScope(name: PermissionName): Scope {
   return name.toLowerCase() as Scope;
 }
 
-/** Built-in preset masks, matching the server's `read_only` and `full_access` presets. */
+/** The agency permissions. Only an agency API key can hold them; a workspace key never does. */
+export const AGENCY_PERMISSIONS: readonly PermissionName[] = [
+  "AGENCY_READ",
+  "AGENCY_MANAGE_CLIENTS",
+  "AGENCY_READ_USAGE",
+  "AGENCY_TRANSFER_AI",
+  "AGENCY_MIGRATE",
+];
+
+const WORKSPACE_PERMISSIONS = PERMISSION_NAMES.filter((name) => CATEGORY[name] !== "agency");
+
+const READ_ONLY_NAMES: readonly PermissionName[] = [
+  "READ_EMAILS",
+  "READ_CAMPAIGNS",
+  "READ_CONTACTS",
+  "READ_UNIBOX",
+  "READ_ANALYTICS",
+  "READ_TEMPLATES",
+  "READ_CRM",
+  "READ_AUDIT_LOGS",
+];
+
+/**
+ * Built-in preset masks for workspace keys, matching the server's `read_only` and
+ * `full_access` presets. `full_access` leaves out `CONNECT_EMAILS` (granted on purpose,
+ * Partnership plan only) and every agency bit.
+ */
 export const PERMISSION_PRESETS = {
-  read_only:
-    PERMISSIONS.READ_EMAILS |
-    PERMISSIONS.READ_CAMPAIGNS |
-    PERMISSIONS.READ_CONTACTS |
-    PERMISSIONS.READ_UNIBOX |
-    PERMISSIONS.READ_ANALYTICS |
-    PERMISSIONS.READ_TEMPLATES |
-    PERMISSIONS.READ_CRM |
-    PERMISSIONS.READ_AUDIT_LOGS,
-  full_access: PERMISSION_NAMES.reduce((mask, name) => mask | PERMISSIONS[name], 0),
+  read_only: orAll(READ_ONLY_NAMES),
+  full_access: orAll(WORKSPACE_PERMISSIONS.filter((name) => name !== "CONNECT_EMAILS")),
 } as const;
+
+/** Every agency bit OR-ed together. */
+export const AGENCY_PERMISSIONS_MASK: number = orAll(AGENCY_PERMISSIONS);
+
+/**
+ * Every bit an agency API key may carry: the workspace bits except `API_KEYS`,
+ * `REALTIME_SUBSCRIBE` and `CONNECT_EMAILS`, plus every agency bit. Matches the server's
+ * `grantable` for agency keys.
+ */
+export const AGENCY_KEY_GRANTABLE_PERMISSIONS: number = maskOr(
+  maskWithout(
+    orAll(WORKSPACE_PERMISSIONS),
+    orAll(["API_KEYS", "REALTIME_SUBSCRIBE", "CONNECT_EMAILS"]),
+  ),
+  AGENCY_PERMISSIONS_MASK,
+);
 
 /**
  * The organization member permission each API permission acts under, mirroring the
@@ -133,6 +228,15 @@ export const PERMISSION_ROLE_NEEDS: Readonly<Record<PermissionName, readonly str
   WARMUP_ROUTING: ["manage_settings"],
   AI_AGENT: ["use_ai"],
   AI_RESEARCH: ["view_contacts", "use_ai"],
+  CONNECT_EMAILS: ["manage_emails"],
+  MANAGE_REPORTS: ["view_analytics", "manage_campaigns"],
+  IMPORT_TOOLS: ["manage_contacts"],
+  // Agency bits are not delegated from a workspace role; see apiPermissionsForMember.
+  AGENCY_READ: [],
+  AGENCY_MANAGE_CLIENTS: [],
+  AGENCY_READ_USAGE: [],
+  AGENCY_TRANSFER_AI: [],
+  AGENCY_MIGRATE: [],
 };
 
 /**
@@ -148,22 +252,26 @@ export function apiPermissionsForMember(
   memberPermissions: Iterable<string>,
   owner = false,
 ): Permissions {
-  if (owner) return Permissions.fullAccess();
+  if (owner) return new Permissions(orAll(WORKSPACE_PERMISSIONS));
   const held = new Set(memberPermissions);
   let mask = 0;
-  for (const name of PERMISSION_NAMES) {
-    if (PERMISSION_ROLE_NEEDS[name].every((need) => held.has(need))) mask |= PERMISSIONS[name];
+  for (const name of WORKSPACE_PERMISSIONS) {
+    if (PERMISSION_ROLE_NEEDS[name].every((need) => held.has(need))) {
+      mask = maskOr(mask, PERMISSIONS[name]);
+    }
   }
   return new Permissions(mask);
 }
 
 /**
- * Every permission a third-party OAuth app may request: everything except `API_KEYS`,
- * since key management stays with people. Also returned as `app_scopes` by
- * `GET /api-keys/permissions`.
+ * Every permission a third-party OAuth app may request: every workspace permission except
+ * `API_KEYS` and `CONNECT_EMAILS`, since key management and mailbox credentials stay with
+ * people. Also returned as `app_scopes` by `GET /api-keys/permissions`.
  */
-export const APP_GRANTABLE_PERMISSIONS: number =
-  PERMISSION_PRESETS.full_access & ~PERMISSIONS.API_KEYS;
+export const APP_GRANTABLE_PERMISSIONS: number = maskWithout(
+  orAll(WORKSPACE_PERMISSIONS),
+  orAll(["API_KEYS", "CONNECT_EMAILS"]),
+);
 
 function normalizeToBits(input: PermissionInput): number {
   if (typeof input === "number") return input;
@@ -176,7 +284,7 @@ function normalizeToBits(input: PermissionInput): number {
 }
 
 function combine(inputs: PermissionInput[]): number {
-  return inputs.reduce<number>((mask, input) => mask | normalizeToBits(input), 0);
+  return inputs.reduce<number>((mask, input) => maskOr(mask, normalizeToBits(input)), 0);
 }
 
 /**
@@ -225,27 +333,27 @@ export class Permissions {
   /** Whether the set contains every supplied permission. */
   has(...permissions: PermissionInput[]): boolean {
     const required = combine(permissions);
-    return (this.value & required) === required;
+    return maskAnd(this.value, required) === required;
   }
 
   /** Whether the set contains at least one supplied permission. */
   hasAny(...permissions: PermissionInput[]): boolean {
-    return (this.value & combine(permissions)) !== 0;
+    return maskAnd(this.value, combine(permissions)) !== 0;
   }
 
   /** Returns a new set with the supplied permissions added. */
   add(...permissions: PermissionInput[]): Permissions {
-    return new Permissions(this.value | combine(permissions));
+    return new Permissions(maskOr(this.value, combine(permissions)));
   }
 
   /** Returns a new set with the supplied permissions removed. */
   remove(...permissions: PermissionInput[]): Permissions {
-    return new Permissions(this.value & ~combine(permissions));
+    return new Permissions(maskWithout(this.value, combine(permissions)));
   }
 
   /** The permission names present in this set. */
   toArray(): PermissionName[] {
-    return PERMISSION_NAMES.filter((name) => (this.value & PERMISSIONS[name]) !== 0);
+    return PERMISSION_NAMES.filter((name) => maskAnd(this.value, PERMISSIONS[name]) !== 0);
   }
 
   /** The OAuth scope strings present in this set. */

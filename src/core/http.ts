@@ -182,6 +182,10 @@ export class HttpClient {
     if (contentType && !hasHeader(headers, HEADER.contentType)) {
       headers[HEADER.contentType] = contentType;
     }
+    const organizationId = opts.organizationId ?? this.options.organizationId;
+    if (organizationId && !hasHeader(headers, HEADER.organization)) {
+      headers[HEADER.organization] = organizationId;
+    }
     const token = await this.options.getToken();
     if (token) headers[HEADER.authorization] = `Bearer ${token}`;
     if (idempotencyKey) headers[HEADER.idempotencyKey] = idempotencyKey;

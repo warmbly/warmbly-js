@@ -185,6 +185,31 @@ describe("Gateway events", () => {
     expect(gw.latestSeq).toBe(12);
   });
 
+  it("delivers EMAIL_BOUNCED with the tracking payload the server publishes", async () => {
+    const gw = new Gateway({ orgId: "org_1", token: "t", webSocket: FakeCtor });
+    const socket = await connectReady(gw);
+    const bounced = vi.fn();
+    gw.on("EMAIL_BOUNCED", (e) => bounced(e.campaign_id, e.contact_email, e.step_id));
+    socket.message([
+      null,
+      null,
+      "org:org_1",
+      "EMAIL_BOUNCED",
+      {
+        event_type: "EMAIL_BOUNCED",
+        timestamp: "2026-11-14T10:00:00Z",
+        user_id: "usr_1",
+        org_id: "org_1",
+        campaign_id: "cmp_1",
+        contact_id: "ct_1",
+        contact_email: "lead@example.com",
+        step_id: "step_1",
+        seq: 13,
+      },
+    ]);
+    expect(bounced).toHaveBeenCalledWith("cmp_1", "lead@example.com", "step_1");
+  });
+
   it("emits CUSTOM_EVENT with its payload", async () => {
     const gw = new Gateway({ orgId: "org_1", token: "t", webSocket: FakeCtor });
     const socket = await connectReady(gw);
