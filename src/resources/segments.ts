@@ -21,7 +21,10 @@ export type SegmentFieldKind =
 
 /** One condition in a segment definition. Scalar operators take `value`, list operators `values`. */
 export interface SegmentCondition {
-  /** The field, e.g. `email_domain`, `last_opened_at`, or `custom.industry`. */
+  /**
+   * The field, e.g. `email_domain`, `last_opened_at`, `country`, `world_region`, or
+   * `custom.industry`. {@link Segments.fields} lists every one.
+   */
   field: string;
   /** The operator, e.g. `equals`, `contains`, `within_days`, `in`, `is_true`. */
   operator: string;
@@ -92,6 +95,11 @@ export interface SegmentField {
   kind?: SegmentFieldKind;
   /** The allowed values, for `enum` fields. */
   options?: string[];
+  /**
+   * Display names for an enum's values where the value alone is not readable (country
+   * codes, timezones, world regions). A value missing from it shows as itself.
+   */
+  option_labels?: Record<string, string>;
   [key: string]: unknown;
 }
 

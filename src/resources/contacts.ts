@@ -49,9 +49,24 @@ export interface Contact {
   /** The family of `mail_host` used for campaign ESP matching: empty, `gmail`, `outlook` or `other`. */
   esp_provider?: string;
   esp_resolved_at?: string | null;
+  /** Whether the domain's mail server accepts any address, so a verdict cannot be confirmed. */
+  is_catch_all?: boolean;
+  /** The campaigns the contact is a lead in. */
+  campaigns?: Array<{ id: string; name: string; [key: string]: unknown }>;
+  /** The categories on the contact. */
+  categories?: Array<{ id: string; title: string; color?: string; [key: string]: unknown }>;
+  /**
+   * The contact's state inside one campaign. Present on search rows only when the search
+   * is scoped to exactly one campaign (`campaign_ids` with one entry).
+   */
+  campaign_lead?: ContactCampaignLead;
   /** The contact's engagement across every campaign. Present on search rows. */
   outreach?: ContactOutreach;
-  /** First-touch attribution, fixed at creation. */
+  /** Lifetime engagement totals. Present on {@link Contacts.get}. */
+  engagement?: ContactEngagement;
+  /** The suppression entry matching the contact's address or domain, or `null`. Present on {@link Contacts.get}. */
+  suppression?: Record<string, unknown> | null;
+  /** First-touch attribution, fixed at creation. Present on {@link Contacts.get}. */
   source?: ContactSource;
   source_detail?: string;
   first_seen_at?: string;
@@ -73,6 +88,73 @@ export interface ContactOutreach {
   last_clicked_at?: string;
   last_replied_at?: string;
   last_bounced_at?: string;
+  [key: string]: unknown;
+}
+
+/** A contact's state inside one campaign, from a search scoped to that campaign. */
+export interface ContactCampaignLead {
+  /** The derived lead status, e.g. `pending`, `active`, `replied`, `bounced`, `failed`. */
+  status: LeadStatus | (string & {});
+  sent: number;
+  /** Human opens only; automated fetches are in `machine_opened`. */
+  opened: number;
+  machine_opened?: number;
+  clicked: number;
+  replied: number;
+  bounced: number;
+  last_activity_at?: string;
+  /** The label of the latest step sent; absent before the first send. */
+  current_step?: string;
+  /** Why the last send failed, set only when `status` is `failed`. */
+  failure_reason?: string;
+  /** The mailbox address the lead's sequence sends from, fixed at the first send. */
+  sender?: string;
+  /** The live per-lead pause, if any. `source` is `out_of_office` or `manual`. */
+  hold?: {
+    since: string;
+    until?: string;
+    reason?: string;
+    source: "out_of_office" | "manual" | (string & {});
+    [key: string]: unknown;
+  };
+  /** Contacts copied on every email to this lead in this campaign. */
+  cc?: Array<{
+    contact_id: string;
+    email: string;
+    first_name?: string;
+    last_name?: string;
+    company?: string;
+    status?: string;
+    [key: string]: unknown;
+  }>;
+  [key: string]: unknown;
+}
+
+/** A contact's lifetime engagement totals, from {@link Contacts.get}. */
+export interface ContactEngagement {
+  total_sent: number;
+  total_opened: number;
+  total_clicked: number;
+  total_replied: number;
+  total_bounced: number;
+  total_complained: number;
+  last_sent_at?: string;
+  last_opened_at?: string;
+  last_clicked_at?: string;
+  last_replied_at?: string;
+  last_bounced_at?: string;
+  /** Each mail client and device the contact's opens came from, most recent first. */
+  reads_on?: Array<{
+    client?: string;
+    client_type?: string;
+    device_hidden?: boolean;
+    device_type?: string;
+    os?: string;
+    browser?: string;
+    opens: number;
+    last_opened_at: string;
+    [key: string]: unknown;
+  }>;
   [key: string]: unknown;
 }
 

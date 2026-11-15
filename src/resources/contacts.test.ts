@@ -552,6 +552,69 @@ describe("Contacts", () => {
     expect(url).toContain("/contacts/c%201");
   });
 
+  it("get() decodes the detail fields, chips and catch-all flag", async () => {
+    const { http } = clientWithSequence([
+      {
+        body: {
+          id: "c_1",
+          email: "ada@acme.com",
+          is_catch_all: true,
+          campaigns: [{ id: "camp_1", name: "Q4" }],
+          categories: [{ id: "cat_1", title: "VIP", color: "#ff0000" }],
+          engagement: {
+            total_sent: 3,
+            total_opened: 2,
+            total_clicked: 1,
+            total_replied: 0,
+            total_bounced: 0,
+            total_complained: 0,
+            reads_on: [{ client: "Gmail", opens: 2, last_opened_at: "2026-11-01T00:00:00Z" }],
+          },
+          suppression: null,
+          source: "lead_finder",
+        },
+      },
+    ]);
+    const c = await new Contacts(http).get("c_1");
+    expect(c.is_catch_all).toBe(true);
+    expect(c.campaigns?.[0]?.name).toBe("Q4");
+    expect(c.categories?.[0]?.title).toBe("VIP");
+    expect(c.engagement?.total_sent).toBe(3);
+    expect(c.engagement?.reads_on?.[0]?.client).toBe("Gmail");
+    expect(c.suppression).toBeNull();
+  });
+
+  it("search() rows scoped to one campaign decode campaign_lead", async () => {
+    const { http } = clientWithSequence([
+      {
+        body: {
+          data: [
+            {
+              id: "c_1",
+              campaign_lead: {
+                status: "active",
+                sent: 1,
+                opened: 1,
+                machine_opened: 0,
+                clicked: 0,
+                replied: 0,
+                bounced: 0,
+                current_step: "Email 2",
+                hold: { since: "2026-11-01T00:00:00Z", source: "out_of_office" },
+              },
+            },
+          ],
+          pagination: { next_cursor: null, has_more: false },
+        },
+      },
+    ]);
+    const page = await new Contacts(http).search({ campaign_ids: ["camp_1"] });
+    const lead = page.data[0]?.campaign_lead;
+    expect(lead?.status).toBe("active");
+    expect(lead?.current_step).toBe("Email 2");
+    expect(lead?.hold?.source).toBe("out_of_office");
+  });
+
   it("update() PATCHes a single contact", async () => {
     const { http, fetchMock } = clientWithSequence([{ body: { id: "c_1", company: "Warmbly" } }]);
     const result = await new Contacts(http).update("c_1", { company: "Warmbly" });

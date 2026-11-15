@@ -74,7 +74,7 @@ export interface PermissionCatalogEntry {
   name: string;
   value: number;
   description: string;
-  category: "read" | "write" | "bulk" | "special";
+  category: "read" | "write" | "bulk" | "special" | (string & {});
   [key: string]: unknown;
 }
 
@@ -88,7 +88,7 @@ export interface PermissionCatalog {
   };
   /** The permission mask the caller may put on a key: their role, or the calling key's own permissions. */
   grantable?: number;
-  /** The mask an OAuth app may request (everything except key management). */
+  /** The mask an OAuth app may request (everything except key management and `CONNECT_EMAILS`). */
   app_scopes?: number;
   [key: string]: unknown;
 }

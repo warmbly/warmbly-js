@@ -361,6 +361,33 @@ describe("Misc identity", () => {
   });
 });
 
+describe("Misc agency fields", () => {
+  it("me() decodes agency_id for an agency API key acting on a client", async () => {
+    const { http } = clientWith({
+      user_id: "u_1",
+      organization_id: "org_client",
+      organization_name: "Client Co",
+      auth_type: "api_key",
+      agency_id: "ag_1",
+      scopes: [],
+    });
+    const me = await new Misc(http).me();
+    expect(me.agency_id).toBe("ag_1");
+    expect(me.organization_id).toBe("org_client");
+  });
+
+  it("plans() decodes the agency plan pool and AI allowance", async () => {
+    const { http } = clientWith({
+      plans: [
+        { id: "p_ag", name: "Agency", monthly_send_pool: 50000, agency_ai_allowance_usd: 25 },
+      ],
+    });
+    const [plan] = await new Misc(http).plans();
+    expect(plan?.monthly_send_pool).toBe(50000);
+    expect(plan?.agency_ai_allowance_usd).toBe(25);
+  });
+});
+
 describe("Misc deliverability and DLQ", () => {
   it("ingestDeliverabilityEvent() POSTs the event body", async () => {
     const { http, fetchMock } = clientWith(undefined, { status: 202 });

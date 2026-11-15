@@ -93,6 +93,19 @@ describe("Forms", () => {
     expect(out.has_more).toBe(false);
   });
 
+  it("listSubmissions sends cursor and decodes the pagination envelope", async () => {
+    const { http, fetchMock } = clientWith({
+      data: [{ id: "s2" }],
+      has_more: true,
+      pagination: { next_cursor: "c_next", has_more: true },
+    });
+    const out = await new Forms(http).listSubmissions("f1", { cursor: "c_prev" });
+    expect(lastCall(fetchMock).url).toContain("cursor=c_prev");
+    expect(out.has_more).toBe(true);
+    expect(out.pagination?.next_cursor).toBe("c_next");
+    expect(out.pagination?.has_more).toBe(true);
+  });
+
   it("deleteSubmission DELETEs /forms/:id/submissions/:sid", async () => {
     const { http, fetchMock } = clientWith(undefined, { status: 200 });
     await new Forms(http).deleteSubmission("f1", "s1");
@@ -157,6 +170,30 @@ describe("Forms", () => {
     const out = await new Forms(http).getDomain();
     expect(lastCall(fetchMock).url).toMatch(/\/forms\/domain$/);
     expect(out.forms_domain).toBe("forms.acme.com");
+  });
+
+  it("getDomain decodes the TXT proof, observed value and edge records", async () => {
+    const { http } = clientWith({
+      forms_domain: "forms.acme.com",
+      forms_domain_verified: false,
+      cname_target: "forms.warmbly.com",
+      txt_name: "_warmbly.forms.acme.com",
+      txt_value: "wmbly-verify=abc",
+      status: "proof_missing",
+      message: "Add the TXT record",
+      observed: "forms.warmbly.com",
+      forms_host_unresolvable: false,
+      edge_records: [
+        { purpose: "edge", type: "TXT", name: "_cf.forms.acme.com", value: "v1", ok: false },
+      ],
+    });
+    const out = await new Forms(http).getDomain();
+    expect(out.status).toBe("proof_missing");
+    expect(out.txt_value).toBe("wmbly-verify=abc");
+    expect(out.observed).toBe("forms.warmbly.com");
+    expect(out.forms_host_unresolvable).toBe(false);
+    expect(out.edge_records?.[0]?.type).toBe("TXT");
+    expect(out.edge_records?.[0]?.ok).toBe(false);
   });
 
   it("setDomain PUTs forms_domain to /forms/domain", async () => {

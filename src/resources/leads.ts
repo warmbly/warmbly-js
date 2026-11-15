@@ -36,6 +36,12 @@ export type LeadPersonSource =
 /** How a person's address was arrived at (empty when there is none). */
 export type LeadEmailSource = "" | "website" | "pattern" | "manual" | (string & {});
 
+/**
+ * Why a lead's website could not be read: `blocked` (it turned automated visitors away),
+ * `robots` (its robots.txt asks not to) or `unreachable`.
+ */
+export type LeadSiteUnread = "blocked" | "robots" | "unreachable" | (string & {});
+
 /** The shape a search covers. */
 export type LeadAreaKind = "bbox" | "circle" | "polygon" | (string & {});
 
@@ -72,8 +78,11 @@ export interface LeadArea {
 /** One address found for a lead and what checking it said. */
 export interface LeadEmail {
   email: string;
-  /** `website` when read off the business's site, else the provider. */
-  source: string;
+  /**
+   * `website` when read off the business's site, `search` when a web search showed it on a
+   * page about the business, else the provider.
+   */
+  source: "website" | "search" | (string & {});
   url?: string;
   domain_match: boolean;
   status?: string;
@@ -98,6 +107,10 @@ export interface LeadSite {
   accepts_all?: boolean;
   /** Set when the listing had no website and one was worked out from the name. */
   found_website?: boolean;
+  /** The reader service that fetched the site after it turned a direct visit away; absent when read directly. */
+  read_via?: string;
+  /** Why a site that could not be read was not; absent when it was read. */
+  unread?: LeadSiteUnread;
   error?: string;
   checked_at?: string | null;
   [key: string]: unknown;
@@ -405,6 +418,11 @@ export interface EnrichLeadsParams extends LeadSelection {
   verify?: boolean;
   /** Also find the people each site names and work out their addresses. Defaults to true. */
   people?: boolean;
+  /**
+   * Search the web for a missing site, or for the addresses a site that could not be read
+   * publishes elsewhere, when a search provider is set up. Defaults to true.
+   */
+  web_search?: boolean;
 }
 
 /** A background pass reading leads' websites. */
@@ -413,6 +431,8 @@ export interface LeadEnrichmentRun {
   requested_by_user_id: string | null;
   verify: boolean;
   people: boolean;
+  /** Whether the run may search the web for missing sites and blocked sites' addresses. */
+  web_search?: boolean;
   /** For example `queued`, `running`, `completed`, `failed`. */
   status: string;
   total: number;

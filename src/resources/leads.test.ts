@@ -224,6 +224,19 @@ describe("Leads", () => {
     expect(out.id).toBe("run1");
   });
 
+  it("enrich sends web_search and decodes it on the run", async () => {
+    const { http, fetchMock } = clientWith(
+      { id: "run2", status: "queued", verify: true, people: true, web_search: false },
+      { status: 202 },
+    );
+    const out = await new Leads(http).enrich({ lead_ids: ["l1"], web_search: false });
+    expect(JSON.parse(String(lastCall(fetchMock).init.body))).toEqual({
+      lead_ids: ["l1"],
+      web_search: false,
+    });
+    expect(out.web_search).toBe(false);
+  });
+
   it("enrichments GETs /leads/enrichments and unwraps data", async () => {
     const { http, fetchMock } = clientWith({ data: [{ id: "run1", status: "running" }] });
     const out = await new Leads(http).enrichments();
@@ -313,6 +326,25 @@ describe("Leads", () => {
     expect(init.method).toBe("GET");
     expect(url).toMatch(/\/leads\/l1$/);
     expect(out.people?.[0]?.name).toBe("Ada");
+  });
+
+  it("get decodes why a site was unread, how it was read, and search-sourced emails", async () => {
+    const { http } = clientWith({
+      ...lead,
+      emails: [
+        {
+          email: "info@acme.de",
+          source: "search",
+          url: "https://dir.example/acme",
+          domain_match: true,
+        },
+      ],
+      site: { reachable: false, https: true, unread: "blocked", read_via: "jina" },
+    });
+    const out = await new Leads(http).get("l1");
+    expect(out.emails[0]?.source).toBe("search");
+    expect(out.site.unread).toBe("blocked");
+    expect(out.site.read_via).toBe("jina");
   });
 
   it("edit PATCHes /leads/:id", async () => {

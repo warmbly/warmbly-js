@@ -275,3 +275,18 @@ describe("ApiKeys.permissions (grantable)", () => {
     expect(cat.app_scopes).toBe(127);
   });
 });
+
+describe("ApiKeys.permissions (categories)", () => {
+  it("keeps the new workspace bits and their categories", async () => {
+    const { http } = clientWith({
+      permissions: [
+        { name: "CONNECT_EMAILS", value: 1, description: "Connect mailboxes", category: "special" },
+        { name: "MANAGE_REPORTS", value: 2, description: "Client reports", category: "write" },
+        { name: "IMPORT_TOOLS", value: 4, description: "Migrate data", category: "bulk" },
+      ],
+      presets: { read_only: 0, full_access: 6 },
+    });
+    const cat = await new ApiKeys(http).permissions();
+    expect(cat.permissions.map((p) => p.category)).toEqual(["special", "write", "bulk"]);
+  });
+});

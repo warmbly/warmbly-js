@@ -59,6 +59,11 @@ export interface AuditLogEntry {
   user_agent?: string;
   /** Before and after values, as strings. */
   changes?: Record<string, string>;
+  /**
+   * Extra context. A change made with an agency API key carries `actor_type`
+   * (`agency_api_key`), `agency_api_key_id` and `agency_api_key_name`; `user_id` is then
+   * the staff member the key acts for.
+   */
   metadata?: Record<string, string>;
   action_date?: string;
   timestamp?: string;
@@ -86,6 +91,13 @@ export interface ListAuditLogsParams {
 export interface Plan {
   id?: string;
   name?: string;
+  /**
+   * Set only on an agency plan: the sends shared by all of the agency's clients each
+   * period. `0` is an agency plan with no pool cap.
+   */
+  monthly_send_pool?: number;
+  /** Set only on an agency plan: what it refills the agency's shared AI balance to each period, in USD. */
+  agency_ai_allowance_usd?: number;
   [key: string]: unknown;
 }
 
@@ -108,8 +120,13 @@ export interface Identity {
   /** The organization the credential acts on, when it is bound to one. */
   organization_id?: string;
   organization_name?: string;
-  /** How the caller authenticated. */
-  auth_type?: "api_key" | "oauth" | "jwt" | string;
+  /** How the caller authenticated. An agency API key reports `api_key`. */
+  auth_type?: "api_key" | "oauth" | "jwt" | (string & {});
+  /**
+   * The agency the credential belongs to, set only for an agency API key acting on one
+   * of its client workspaces (the one `organization_id` names).
+   */
+  agency_id?: string;
   /** The scope strings the credential was granted. */
   scopes?: string[];
   [key: string]: unknown;
