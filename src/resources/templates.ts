@@ -1,5 +1,6 @@
 import type { RequestOptions } from "../core/types";
 import { APIResource } from "./base";
+import type { WorkspaceCopyResult } from "./campaigns";
 
 /** A reply template. The copy lives in `body_html` and `body_plain`, not a single `body`. */
 export interface Template {
@@ -147,6 +148,15 @@ export interface RenderedTemplate {
   [key: string]: unknown;
 }
 
+/** Body for {@link Templates.copyTo}. */
+export interface CopyTemplatesToWorkspacesParams {
+  /** Templates of this workspace to copy, at most 50. */
+  template_ids: string[];
+  /** Destination workspace ids, at most 10. */
+  organization_ids: string[];
+  [key: string]: unknown;
+}
+
 /**
  * Manage email templates: list, create, duplicate, render, score, reorder, and preview.
  * Reachable as `warmbly.templates`.
@@ -271,5 +281,25 @@ export class Templates extends APIResource {
    */
   campaignPreview(params: Record<string, unknown>): Promise<Record<string, unknown>> {
     return this.http.post<Record<string, unknown>>("campaign-template-preview", { body: params });
+  }
+
+  /**
+   * Copies reply templates into up to 10 other workspaces. Answers 200 with one entry per
+   * destination; check each `status`. The route admits `READ_TEMPLATES`, but the copy also
+   * needs `WRITE_TEMPLATES`. A key or OAuth token reaches only its own workspace, so any
+   * other destination fails with `403 cross_workspace_copy_requires_session`.
+   * @example
+   * const results = await warmbly.templates.copyTo({
+   *   template_ids: ["tpl_1", "tpl_2"],
+   *   organization_ids: ["org_2"],
+   * });
+   */
+  copyTo(
+    params: CopyTemplatesToWorkspacesParams,
+    opts?: RequestOptions,
+  ): Promise<WorkspaceCopyResult[]> {
+    return this.http
+      .post<{ data: WorkspaceCopyResult[] }>("templates/copy-to", { ...opts, body: params })
+      .then((r) => r.data ?? []);
   }
 }

@@ -283,4 +283,35 @@ describe("Templates", () => {
       expect(await parseBody(init)).toEqual({ campaign_id: "c_1" });
     });
   });
+
+  describe("copyTo", () => {
+    it("POSTs template_ids and organization_ids and unwraps data", async () => {
+      const { http, fetchMock } = clientWith({
+        data: [
+          {
+            organization_id: "org_2",
+            organization_name: "Acme",
+            status: "copied",
+            templates: [{ id: "tpl_9", name: "Intro" }],
+            review: [],
+            warnings: [],
+          },
+        ],
+      });
+      const out = await new Templates(http).copyTo({
+        template_ids: ["tpl_1"],
+        organization_ids: ["org_2"],
+      });
+      const { url, init } = lastCall(fetchMock);
+      expect(init.method).toBe("POST");
+      expect(url).toMatch(/\/templates\/copy-to$/);
+      expect(await parseBody(init)).toEqual({
+        template_ids: ["tpl_1"],
+        organization_ids: ["org_2"],
+      });
+      expect(out[0]?.status).toBe("copied");
+      expect(out[0]?.templates[0]?.id).toBe("tpl_9");
+      expect(out[0]?.campaign).toBeUndefined();
+    });
+  });
 });

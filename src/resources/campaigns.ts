@@ -15,6 +15,13 @@ export type CampaignKind = "sequence" | "one_time";
  */
 export type CampaignFollowUpSender = "same" | "same_domain" | "rotate" | (string & {});
 
+/**
+ * Whose clock a campaign's sending schedule is read on: the campaign's own timezone
+ * (`campaign`) or each lead's (`recipient`, falling back to the campaign's when a lead's
+ * is not known).
+ */
+export type CampaignTimezoneMode = "campaign" | "recipient" | (string & {});
+
 /** A Warmbly campaign. Shape is documented-but-open. */
 export interface Campaign {
   id: string;
@@ -26,8 +33,20 @@ export interface Campaign {
   timezone?: string;
   /** The zone in use, resolved on read (the campaign's own, else the workspace's). */
   effective_timezone?: string;
+  /** Whose clock the schedule is read on. */
+  timezone_mode?: CampaignTimezoneMode;
   /** Which mailbox a lead's follow-ups leave from. */
   follow_up_sender?: CampaignFollowUpSender;
+  /** Whether the campaign ramps its daily volume up. */
+  ramp_enabled?: boolean;
+  ramp_start?: number;
+  ramp_increment?: number;
+  ramp_ceiling?: number;
+  /**
+   * Holds a mailbox leaving warmup to the reply-earned cold ceiling in this campaign.
+   * Off leaves the mailbox cap, the campaign limit and the ramp as its only volume limits.
+   */
+  warmup_graduation?: boolean;
   /** Holds a contact's first email back this many minutes after they enter; 0 is immediate. */
   entry_delay_minutes?: number;
   /** Keep running for new leads: out of leads, the campaign stays active and waits. */
@@ -182,8 +201,18 @@ export interface CreateCampaignParams {
   name?: string;
   description?: string;
   stop_on_meeting?: boolean;
+  /** The zone the schedule is read in. Omit to follow the workspace timezone. */
+  timezone?: string;
+  /** Whose clock the schedule is read on (default `campaign`). */
+  timezone_mode?: CampaignTimezoneMode;
   /** Which mailbox follow-ups leave from. */
   follow_up_sender?: CampaignFollowUpSender;
+  ramp_enabled?: boolean;
+  ramp_start?: number;
+  ramp_increment?: number;
+  ramp_ceiling?: number;
+  /** Earn mailboxes leaving warmup their cold volume with replies (default true). */
+  warmup_graduation?: boolean;
   /** Hold each contact's first email back this many minutes after they enter. */
   entry_delay_minutes?: number;
   /** Keep running for new leads instead of finishing. Linking a segment turns it on. */
@@ -202,7 +231,16 @@ export interface UpdateCampaignParams {
   name?: string;
   description?: string;
   stop_on_meeting?: boolean;
+  timezone?: string;
+  /** Whose clock the schedule is read on. */
+  timezone_mode?: CampaignTimezoneMode;
   follow_up_sender?: CampaignFollowUpSender;
+  ramp_enabled?: boolean;
+  ramp_start?: number;
+  ramp_increment?: number;
+  ramp_ceiling?: number;
+  /** Hold mailboxes leaving warmup to the reply-earned cold ceiling in this campaign. */
+  warmup_graduation?: boolean;
   entry_delay_minutes?: number;
   continuous?: boolean;
   /** Send `null` to clear the date and start now. */
@@ -255,6 +293,12 @@ export interface EstimateCampaignParams {
   end_time?: string;
   /** Each follow-up's `wait_after` in days, in order. Empty or omitted is a single email. Max 30. */
   step_waits?: number[];
+  /** The ramp-up as the wizard has it. Unsent fields come from the saved campaign, else a new campaign's defaults. */
+  warmup_graduation?: boolean;
+  ramp_enabled?: boolean;
+  ramp_start?: number;
+  ramp_increment?: number;
+  ramp_ceiling?: number;
   /** Project a saved campaign, filling anything not sent from it. `segment_ids` may then be `[]`. */
   campaign_id?: string;
   [key: string]: unknown;
@@ -345,7 +389,10 @@ export interface CampaignEstimate {
   warmup?: CampaignEstimateWarmup;
   /** What the pool already sends for other campaigns on an average recent day. */
   other_campaigns_per_day?: number;
-  /** The clamp costing the most sends on day one; empty when the mailbox caps are the limit. */
+  /**
+   * The clamp costing the most sends on day one, e.g. `campaign_limit`, `campaign_ramp`,
+   * `warmup_graduation`, `spacing`, `other_campaigns`; empty when the mailbox caps are the limit.
+   */
   bottleneck?: string;
   /** Day by day from the start, at most 120 days. */
   timeline?: CampaignEstimateDay[];
@@ -643,6 +690,79 @@ export interface PutCampaignPlacementMonitorParams {
   /** 0..100. Default 70 on creation. */
   alert_below?: number;
   pause_on_alert?: boolean;
+  [key: string]: unknown;
+}
+
+/** One timezone and how many of a campaign's leads are in it. */
+export interface CampaignLeadZone {
+  /** IANA zone. */
+  timezone: string;
+  /** The zone's country; empty for UTC and fixed offsets. */
+  country: string;
+  leads: number;
+  [key: string]: unknown;
+}
+
+/** The result of {@link Campaigns.leadTimezones}: where a campaign's leads are, by resolved timezone. */
+export interface CampaignLeadTimezones {
+  campaign_id: string;
+  timezone_mode: CampaignTimezoneMode;
+  /** The campaign's own clock, the one a lead with no known timezone is sent on. */
+  timezone: string;
+  total: number;
+  /** Leads nothing on the record places. */
+  unknown: number;
+  /** Leads whose record changed and has not been read again yet; counted under their previous answer meanwhile. */
+  resolving: number;
+  /** Largest first. */
+  zones: CampaignLeadZone[];
+  [key: string]: unknown;
+}
+
+/** Body for {@link Campaigns.copyTo}. */
+export interface CopyCampaignToWorkspacesParams {
+  /** Destination workspace ids, at most 10. */
+  organization_ids: string[];
+  /** Reply templates of this workspace to copy along. */
+  template_ids?: string[];
+  [key: string]: unknown;
+}
+
+/** What one destination workspace got from a copy. */
+export type WorkspaceCopyStatus = "copied" | "partial" | "failed" | (string & {});
+
+/** One row a copy created in the destination workspace. */
+export interface WorkspaceCopiedRef {
+  id: string;
+  name: string;
+  [key: string]: unknown;
+}
+
+/**
+ * A copied step whose settings pointed at something only the source workspace has (a
+ * tag, segment, pipeline, automation, teammate or form). The copy clears every one but a
+ * form link.
+ */
+export interface WorkspaceCopyReview {
+  step_id: string;
+  step_name: string;
+  /** The settings to review. */
+  fields: string[];
+  [key: string]: unknown;
+}
+
+/** One destination's outcome in a copy-to-workspace call. */
+export interface WorkspaceCopyResult {
+  organization_id: string;
+  organization_name: string;
+  status: WorkspaceCopyStatus;
+  /** The draft campaign created. Absent on a template copy and when the workspace got nothing. */
+  campaign?: WorkspaceCopiedRef;
+  templates: WorkspaceCopiedRef[];
+  review: WorkspaceCopyReview[];
+  warnings: string[];
+  /** Present when the workspace got nothing. */
+  error?: { code: string; message: string; [key: string]: unknown };
   [key: string]: unknown;
 }
 
@@ -1224,6 +1344,42 @@ export class Campaigns extends APIResource {
    */
   deletePlacementMonitor(id: string, opts?: RequestOptions): Promise<void> {
     return this.http.delete<void>(this.path("campaigns", id, "placement-monitor"), opts);
+  }
+  /**
+   * Counts the campaign's leads by the timezone their records resolve to, largest first,
+   * plus the leads nothing places. Read it before launching with `timezone_mode:
+   * "recipient"`. Needs `READ_CAMPAIGNS`.
+   * @example
+   * const { zones, unknown } = await warmbly.campaigns.leadTimezones("camp_1");
+   */
+  leadTimezones(id: string, opts?: RequestOptions): Promise<CampaignLeadTimezones> {
+    return this.http.get<CampaignLeadTimezones>(this.path("campaigns", id, "lead-timezones"), opts);
+  }
+
+  /**
+   * Copies the campaign's configuration, and any `template_ids` from this workspace, into
+   * up to 10 other workspaces as drafts. Answers 200 with one entry per destination; check
+   * each `status`. The route admits `READ_CAMPAIGNS`, but the copy also needs
+   * `WRITE_CAMPAIGNS` (plus `READ_TEMPLATES` and `WRITE_TEMPLATES` with `template_ids`). A
+   * key or OAuth token reaches only its own workspace, so any other destination fails
+   * with `403 cross_workspace_copy_requires_session`.
+   * @example
+   * const results = await warmbly.campaigns.copyTo("camp_1", {
+   *   organization_ids: ["org_2"],
+   *   template_ids: ["tpl_1"],
+   * });
+   */
+  copyTo(
+    id: string,
+    params: CopyCampaignToWorkspacesParams,
+    opts?: RequestOptions,
+  ): Promise<WorkspaceCopyResult[]> {
+    return this.http
+      .post<{ data: WorkspaceCopyResult[] }>(this.path("campaigns", id, "copy-to"), {
+        ...opts,
+        body: params,
+      })
+      .then((r) => r.data ?? []);
   }
 }
 

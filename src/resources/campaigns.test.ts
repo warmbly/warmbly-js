@@ -800,4 +800,89 @@ describe("Campaigns: estimate, duplicate, forms, segments, start options", () =>
     expect(init.method).toBe("DELETE");
     expect(url).toContain("/campaigns/c1/placement-monitor");
   });
+
+  it("leadTimezones GETs the lead timezone breakdown", async () => {
+    const { http, fetchMock } = clientWith({
+      campaign_id: "c1",
+      timezone_mode: "recipient",
+      timezone: "Europe/Berlin",
+      total: 10,
+      unknown: 2,
+      resolving: 1,
+      zones: [
+        { timezone: "America/Chicago", country: "US", leads: 5 },
+        { timezone: "UTC", country: "", leads: 3 },
+      ],
+    });
+    const out = await new Campaigns(http).leadTimezones("c1");
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("GET");
+    expect(url).toMatch(/\/campaigns\/c1\/lead-timezones$/);
+    expect(out.timezone_mode).toBe("recipient");
+    expect(out.zones[0]?.leads).toBe(5);
+    expect(out.zones[1]?.country).toBe("");
+  });
+
+  it("copyTo POSTs organization_ids and template_ids and unwraps data", async () => {
+    const { http, fetchMock } = clientWith({
+      data: [
+        {
+          organization_id: "org_2",
+          organization_name: "Acme",
+          status: "partial",
+          campaign: { id: "c_copy", name: "Q3 outreach" },
+          templates: [{ id: "tpl_copy", name: "Intro" }],
+          review: [{ step_id: "s1", step_name: "Step 1", fields: ["add_tag"] }],
+          warnings: ["One attachment was too large to copy."],
+        },
+        {
+          organization_id: "org_3",
+          organization_name: "Globex",
+          status: "failed",
+          templates: [],
+          review: [],
+          warnings: [],
+          error: { code: "cross_workspace_copy_requires_session", message: "Use a session." },
+        },
+      ],
+    });
+    const out = await new Campaigns(http).copyTo("c1", {
+      organization_ids: ["org_2", "org_3"],
+      template_ids: ["tpl_1"],
+    });
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("POST");
+    expect(url).toMatch(/\/campaigns\/c1\/copy-to$/);
+    expect(JSON.parse(String(init.body))).toEqual({
+      organization_ids: ["org_2", "org_3"],
+      template_ids: ["tpl_1"],
+    });
+    expect(headerOf(init, "Idempotency-Key")).toBeTruthy();
+    expect(out[0]?.campaign?.id).toBe("c_copy");
+    expect(out[0]?.review[0]?.fields).toEqual(["add_tag"]);
+    expect(out[1]?.error?.code).toBe("cross_workspace_copy_requires_session");
+  });
+
+  it("decodes timezone_mode and warmup_graduation and sends them on create", async () => {
+    const { http, fetchMock } = clientWith({
+      id: "c1",
+      timezone_mode: "recipient",
+      warmup_graduation: false,
+      ramp_enabled: true,
+      ramp_start: 10,
+    });
+    const c = await new Campaigns(http).create({
+      name: "Q3",
+      timezone_mode: "recipient",
+      warmup_graduation: false,
+    });
+    const { init } = lastCall(fetchMock);
+    expect(JSON.parse(String(init.body))).toEqual({
+      name: "Q3",
+      timezone_mode: "recipient",
+      warmup_graduation: false,
+    });
+    expect(c.timezone_mode).toBe("recipient");
+    expect(c.warmup_graduation).toBe(false);
+  });
 });
