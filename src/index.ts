@@ -16,6 +16,7 @@ export { default, Warmbly, Warmbly as WarmblyClient } from "./client";
 export { resolveClientOptions } from "./core/config";
 
 // Core: errors, shared types, pagination, the HTTP client, and option resolution.
+export * from "./core/error-codes";
 export * from "./core/errors";
 export type { HttpResponse } from "./core/http";
 export { HttpClient } from "./core/http";

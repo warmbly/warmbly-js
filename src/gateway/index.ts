@@ -26,33 +26,42 @@ export type {
   CampaignEvent,
   CloseInfo,
   ContactEvent,
+  ContactImportEvent,
   ContactsReloadEvent,
+  CRMSyncedEvent,
   CreditsChangedEvent,
   CreditsLowEvent,
   CustomEvent,
+  DirectEmailEvent,
   EmailEvent,
   FormSubmissionEvent,
   GatewayEventBase,
   GatewayLifecycleMap,
   GatewayLifecycleName,
+  MailboxImportEvent,
   MeetingEvent,
   NotificationEvent,
   PageHitEvent,
+  PlacementTestEvent,
   RateLimitedInfo,
   ReconnectingInfo,
   TaskProgressEvent,
   WarmblyEventMap,
   WarmblyEventName,
+  WarmupActivityEvent,
+  WarmupPlacementEvent,
 } from "./events";
 export { WARMBLY_EVENTS } from "./events";
 // Values.
 export { Gateway } from "./gateway";
-export type { GatewayIntent } from "./intents";
+export type { EventScopeRequirement, GatewayIntent } from "./intents";
 export {
   ALL_INTENTS,
+  credentialReceivesEvent,
   GatewayIntents,
   matchesIntents,
   normalizeIntents,
+  requiredScopeForEvent,
 } from "./intents";
 export {
   buildPresenceUpdate,
@@ -64,6 +73,7 @@ export type {
   GatewayOptions,
   GatewayState,
   GatewayTokenProvider,
+  GatewayTokenTransport,
   HelloPayload,
   ParsedChannelTopic,
   PresenceAction,
@@ -76,12 +86,14 @@ export type {
   WebSocketCloseEvent,
   WebSocketCtor,
   WebSocketEventName,
+  WebSocketInit,
   WebSocketLike,
   WebSocketMessageEvent,
 } from "./types";
 export {
   ChannelTopic,
   describeCloseCode,
+  GATEWAY_TOKEN_HEADER,
   GatewayCloseCode,
   HEARTBEAT_TIMEOUT_CLOSE_CODE,
   isRejectionCloseCode,

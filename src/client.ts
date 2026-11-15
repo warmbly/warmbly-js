@@ -13,6 +13,7 @@ import { OAuthApplications } from "./oauth/applications";
 import { OAuthClient } from "./oauth/oauth";
 import {
   Advisor,
+  Agency,
   AgentTools,
   AISkills,
   Analytics,
@@ -21,13 +22,18 @@ import {
   Campaigns,
   Contacts,
   Crm,
+  EmailImages,
   Emails,
   Forms,
   Generation,
   Integrations,
   LeadSync,
+  Leads,
   Meetings,
+  Migrations,
   Misc,
+  Placement,
+  Reports,
   Segments,
   Suppressions,
   Templates,
@@ -69,6 +75,8 @@ export class Warmbly {
 
   /** Fully resolved options with defaults applied. */
   readonly options: ResolvedClientOptions;
+  /** The options this client was constructed with, kept for {@link Warmbly.withOrganization}. */
+  readonly #clientOptions: ClientOptions;
   /** The underlying HTTP client. Use {@link Warmbly.request} for unmodeled endpoints. */
   readonly http: HttpClient;
 
@@ -116,8 +124,24 @@ export class Warmbly {
   readonly misc: Misc;
   /** Manage your own OAuth applications (requires the `API_KEYS` scope). */
   readonly oauthApplications: OAuthApplications;
+  /** Lead finder: search, enrich, and import leads. */
+  readonly leads: Leads;
+  /** Inbox placement tests and batches. */
+  readonly placement: Placement;
+  /** Uploaded images for email templates. */
+  readonly emailImages: EmailImages;
+  /** Bring mailboxes, contacts and campaigns over from another outreach tool. */
+  readonly migrations: Migrations;
+  /**
+   * The agency endpoints under `/agency`: clients, usage, AI balance, overview, inbox and
+   * migrations. Takes an agency API key (`wmagency_...`) or a session.
+   */
+  readonly agency: Agency;
+  /** Client reports: build, share by public link and email on a schedule. */
+  readonly reports: Reports;
 
   constructor(options: ClientOptions = {}) {
+    this.#clientOptions = { ...options };
     this.options = resolveClientOptions(options);
     this.http = new HttpClient(this.options);
 
@@ -143,6 +167,29 @@ export class Warmbly {
     this.webhooks = new Webhooks(this.http);
     this.misc = new Misc(this.http);
     this.oauthApplications = new OAuthApplications(this.http);
+    this.leads = new Leads(this.http);
+    this.placement = new Placement(this.http);
+    this.emailImages = new EmailImages(this.http);
+    this.migrations = new Migrations(this.http);
+    this.agency = new Agency(this.http);
+    this.reports = new Reports(this.http);
+  }
+
+  /**
+   * Returns a new client with the same credentials and settings that acts on another
+   * workspace. With an agency API key this is how you switch between client workspaces: each
+   * request carries the id in the `Warmbly-Organization` header. The original client is left
+   * unchanged.
+   *
+   * @example
+   * const agency = new Warmbly({ apiKey: process.env.WARMBLY_AGENCY_KEY });
+   * for (const client of await agency.agency.clients.list(agencyId)) {
+   *   const acme = agency.withOrganization(client.organization_id);
+   *   for await (const c of await acme.campaigns.list()) console.log(client.name, c.name);
+   * }
+   */
+  withOrganization(organizationId: string): Warmbly {
+    return new Warmbly({ ...this.#clientOptions, organizationId });
   }
 
   /**

@@ -10,18 +10,18 @@ const warmbly = new Warmbly({ apiKey: process.env.WARMBLY_API_KEY });
 // Create a pipeline. You can seed stages inline at creation time.
 const pipeline = await warmbly.crm.createPipeline({
   name: "Sales",
-  stages: [{ name: "Lead", position: 0 }],
+  stages: [{ name: "Lead", color: "#94a3b8" }],
 });
 console.log("pipeline", pipeline.id);
 
 // Add more stages to the pipeline one at a time.
 const qualified = await warmbly.crm.createStage(pipeline.id, {
   name: "Qualified",
-  position: 1,
+  color: "#3b82f6",
 });
 const won = await warmbly.crm.createStage(pipeline.id, {
   name: "Won",
-  position: 2,
+  color: "#22c55e",
 });
 console.log("stages", qualified.id, won.id);
 
@@ -29,6 +29,7 @@ console.log("stages", qualified.id, won.id);
 const deal = await warmbly.crm.createDeal({
   pipeline_id: pipeline.id,
   stage_id: qualified.id,
+  name: "Acme renewal",
   contact_id: "c_1",
   value: 5000,
 });
@@ -60,10 +61,11 @@ console.log("task types", callType.id, emailType.id);
 
 // Create a task tied to the deal and a contact, due tomorrow.
 const task = await warmbly.crm.createTask({
-  task_type_id: callType.id,
+  title: "Call Jordan",
+  type: callType.name,
   contact_id: "c_1",
   deal_id: deal.id,
-  due_at: "2026-06-16T15:00:00Z",
+  due_date: "2026-06-16T15:00:00Z",
 });
 console.log("task", task.id);
 

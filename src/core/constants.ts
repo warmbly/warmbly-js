@@ -27,6 +27,7 @@ export const HEADER = {
   accept: "Accept",
   userAgent: "User-Agent",
   idempotencyKey: "Idempotency-Key",
+  organization: "Warmbly-Organization",
   requestId: "X-Request-Id",
   apiVersion: "API-Version",
   retryAfter: "Retry-After",

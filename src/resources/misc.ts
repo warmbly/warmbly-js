@@ -45,11 +45,45 @@ export interface Team {
 /** An audit log entry. */
 export interface AuditLogEntry {
   id?: string;
+  org_id?: string;
+  /** The actor's id. */
+  user_id?: string;
+  /** The actor, when still known. */
+  actor?: { id: string; first_name: string; last_name: string; email: string };
+  /** `create`, `update`, `delete`, `revoke`, `rotate`, `connect`, and more; open set. */
   action?: string;
+  /** What changed: `campaign`, `email_account`, `api_key`, `webhook`, `oauth_application`, and more; open set. */
+  entity_type?: string;
+  entity_id?: string;
+  ip_address?: string;
+  user_agent?: string;
+  /** Before and after values, as strings. */
+  changes?: Record<string, string>;
+  /**
+   * Extra context. A change made with an agency API key carries `actor_type`
+   * (`agency_api_key`), `agency_api_key_id` and `agency_api_key_name`; `user_id` is then
+   * the staff member the key acts for.
+   */
+  metadata?: Record<string, string>;
+  action_date?: string;
+  timestamp?: string;
+  [key: string]: unknown;
+}
+
+/** Query params for {@link Misc.auditLogs}. */
+export interface ListAuditLogsParams {
+  cursor?: string;
+  limit?: number;
   actor_id?: string;
-  resource_type?: string;
-  resource_id?: string;
-  created_at?: string;
+  entity_id?: string;
+  entity_type?: string;
+  action?: string;
+  /** One UTC day, `YYYY-MM-DD`. */
+  date?: string;
+  /** Range start, RFC 3339 or `YYYY-MM-DD`. Overrides `date`. */
+  start_date?: string;
+  /** Range end, RFC 3339 or `YYYY-MM-DD`. Overrides `date`. */
+  end_date?: string;
   [key: string]: unknown;
 }
 
@@ -57,6 +91,13 @@ export interface AuditLogEntry {
 export interface Plan {
   id?: string;
   name?: string;
+  /**
+   * Set only on an agency plan: the sends shared by all of the agency's clients each
+   * period. `0` is an agency plan with no pool cap.
+   */
+  monthly_send_pool?: number;
+  /** Set only on an agency plan: what it refills the agency's shared AI balance to each period, in USD. */
+  agency_ai_allowance_usd?: number;
   [key: string]: unknown;
 }
 
@@ -79,8 +120,13 @@ export interface Identity {
   /** The organization the credential acts on, when it is bound to one. */
   organization_id?: string;
   organization_name?: string;
-  /** How the caller authenticated. */
-  auth_type?: "api_key" | "oauth" | "jwt" | string;
+  /** How the caller authenticated. An agency API key reports `api_key`. */
+  auth_type?: "api_key" | "oauth" | "jwt" | (string & {});
+  /**
+   * The agency the credential belongs to, set only for an agency API key acting on one
+   * of its client workspaces (the one `organization_id` names).
+   */
+  agency_id?: string;
   /** The scope strings the credential was granted. */
   scopes?: string[];
   [key: string]: unknown;
@@ -92,6 +138,8 @@ export interface Identity {
  */
 export interface AuthConfig {
   captcha?: boolean;
+  /** Whether the native app may prove itself with App Attest instead of the captcha. */
+  app_attest?: boolean;
   password_login?: boolean;
   login_code?: string;
   registration?: string;
@@ -102,6 +150,8 @@ export interface AuthConfig {
   providers?: string[];
   provider_labels?: Record<string, string>;
   self_hosted?: boolean;
+  /** Whether a new Gmail mailbox may be connected with Google sign-in (otherwise app passwords). */
+  gmail_oauth_connect?: boolean;
   /** False under `BILLING_PROVIDER=none`, where every feature is unlocked server-side. */
   billing_enabled?: boolean;
   /** True while the instance still needs its first-run claim. */
@@ -112,6 +162,18 @@ export interface AuthConfig {
   websocket_url?: string;
   /** The dashboard origin a client sends someone to. Omitted when the instance has none. */
   app_url?: string;
+  /** This API's own public base URL, taken from the request. */
+  api_url?: string;
+  /** What this deployment calls itself. Fields are empty when the operator configured none. */
+  brand?: {
+    name: string;
+    website_url?: string;
+    website_label?: string;
+    terms_url?: string;
+    privacy_url?: string;
+    support_email?: string;
+    [key: string]: unknown;
+  };
   [key: string]: unknown;
 }
 
@@ -165,7 +227,7 @@ export class Misc extends APIResource {
 
   /**
    * Returns who the active credential belongs to, plus the scopes it was granted. Needs
-   * no specific permission, so any valid API key, OAuth token, or session can call it —
+   * no specific permission, so any valid API key, OAuth token, or session can call it -
    * which makes it the right way to validate a connection. Unlike `/auth/me` (JWT only),
    * it is reachable with an API key.
    *
@@ -317,11 +379,11 @@ export class Misc extends APIResource {
   // --- Audit logs ---
 
   /**
-   * Lists audit log entries, auto-paginating when iterated.
+   * Lists audit log entries, auto-paginating when iterated. Needs `READ_AUDIT_LOGS`.
    * @example
    * for await (const entry of await warmbly.misc.auditLogs()) console.log(entry.action);
    */
-  auditLogs(params?: Record<string, unknown>): Promise<Page<AuditLogEntry>> {
+  auditLogs(params?: ListAuditLogsParams): Promise<Page<AuditLogEntry>> {
     return this.http.getPage<AuditLogEntry>("audit-logs", { query: params });
   }
 

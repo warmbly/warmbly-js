@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { WarmblyError } from "./core/errors";
 import {
+  AGENCY_KEY_GRANTABLE_PERMISSIONS,
+  AGENCY_PERMISSIONS,
+  AGENCY_PERMISSIONS_MASK,
+  APP_GRANTABLE_PERMISSIONS,
+  apiPermissionsForMember,
+  maskAnd,
+  maskOr,
+  maskWithout,
   PERMISSION_PRESETS,
+  PERMISSION_ROLE_NEEDS,
   PERMISSIONS,
   Permissions,
   permissionCategory,
@@ -34,19 +43,28 @@ describe("permission bits", () => {
     expect(PERMISSIONS.WARMUP_ROUTING).toBe(2097152);
     expect(PERMISSIONS.AI_AGENT).toBe(4194304);
     expect(PERMISSIONS.AI_RESEARCH).toBe(8388608);
+    expect(PERMISSIONS.CONNECT_EMAILS).toBe(16777216);
+    expect(PERMISSIONS.MANAGE_REPORTS).toBe(33554432);
+    expect(PERMISSIONS.AGENCY_READ).toBe(67108864);
+    expect(PERMISSIONS.AGENCY_MANAGE_CLIENTS).toBe(134217728);
+    expect(PERMISSIONS.AGENCY_READ_USAGE).toBe(268435456);
+    expect(PERMISSIONS.AGENCY_TRANSFER_AI).toBe(536870912);
+    expect(PERMISSIONS.IMPORT_TOOLS).toBe(1073741824);
+    expect(PERMISSIONS.AGENCY_MIGRATE).toBe(2147483648);
   });
 
   it("uses unique single-bit values", () => {
     const values = Object.values(PERMISSIONS);
     expect(new Set(values).size).toBe(values.length);
     for (const v of values) {
-      expect(v & (v - 1)).toBe(0);
+      expect(Number.isInteger(Math.log2(v))).toBe(true);
     }
   });
 
   it("compute presets that match the server", () => {
     expect(PERMISSION_PRESETS.read_only).toBe(688159);
-    expect(PERMISSION_PRESETS.full_access).toBe(16777215);
+    // The server's APIPermFullAccess: every workspace bit but CONNECT_EMAILS.
+    expect(PERMISSION_PRESETS.full_access).toBe(1124073471);
   });
 
   it("read_only is exactly the read bits", () => {
@@ -62,9 +80,11 @@ describe("permission bits", () => {
     );
   });
 
-  it("full_access contains every bit", () => {
-    const all = Object.values(PERMISSIONS).reduce((mask, v) => mask | v, 0);
-    expect(PERMISSION_PRESETS.full_access).toBe(all);
+  it("full_access contains every workspace bit except CONNECT_EMAILS", () => {
+    const all = Object.values(PERMISSIONS).reduce((mask, v) => maskOr(mask, v), 0);
+    expect(PERMISSION_PRESETS.full_access).toBe(
+      maskWithout(all, maskOr(AGENCY_PERMISSIONS_MASK, PERMISSIONS.CONNECT_EMAILS)),
+    );
   });
 });
 
@@ -167,7 +187,7 @@ describe("Permissions presets", () => {
 
   it("fullAccess matches the preset", () => {
     expect(Permissions.fullAccess().value).toBe(PERMISSION_PRESETS.full_access);
-    expect(Permissions.fullAccess().value).toBe(16777215);
+    expect(Permissions.fullAccess().value).toBe(1124073471);
   });
 
   it("default constructor is empty", () => {
@@ -272,5 +292,70 @@ describe("normalizeToBits errors", () => {
     expect(() => p.has("bogus" as never)).toThrow(WarmblyError);
     expect(() => p.add("bogus" as never)).toThrow(WarmblyError);
     expect(() => p.remove("bogus" as never)).toThrow(WarmblyError);
+  });
+});
+
+describe("role delegation", () => {
+  it("lists a role need for every permission", () => {
+    expect(Object.keys(PERMISSION_ROLE_NEEDS).sort()).toEqual(Object.keys(PERMISSIONS).sort());
+  });
+
+  it("delegates every workspace bit to an owner and nothing to an empty role", () => {
+    // The server's AllAPIPermissionsMask: full_access plus CONNECT_EMAILS, no agency bit.
+    expect(apiPermissionsForMember([], true).value).toBe(1140850687);
+    expect(apiPermissionsForMember([], true).hasAny(...AGENCY_PERMISSIONS)).toBe(false);
+    expect(apiPermissionsForMember([]).toScopes()).toEqual(["realtime_subscribe"]);
+  });
+
+  it("requires every member permission an API permission lists", () => {
+    expect(apiPermissionsForMember(["view_contacts"]).has("AI_RESEARCH")).toBe(false);
+    expect(apiPermissionsForMember(["view_contacts", "use_ai"]).has("AI_RESEARCH")).toBe(true);
+    expect(apiPermissionsForMember(["view_campaigns"]).toScopes()).toEqual([
+      "read_emails",
+      "read_campaigns",
+      "realtime_subscribe",
+      "read_templates",
+    ]);
+  });
+
+  it("never grants API_KEYS or CONNECT_EMAILS to an OAuth app", () => {
+    expect(maskAnd(APP_GRANTABLE_PERMISSIONS, PERMISSIONS.API_KEYS)).toBe(0);
+    expect(maskAnd(APP_GRANTABLE_PERMISSIONS, PERMISSIONS.CONNECT_EMAILS)).toBe(0);
+    expect(maskAnd(APP_GRANTABLE_PERMISSIONS, AGENCY_PERMISSIONS_MASK)).toBe(0);
+    expect(maskOr(APP_GRANTABLE_PERMISSIONS, PERMISSIONS.API_KEYS)).toBe(
+      PERMISSION_PRESETS.full_access,
+    );
+  });
+});
+
+describe("agency permissions", () => {
+  it("files the agency bits under the agency category", () => {
+    for (const name of AGENCY_PERMISSIONS) expect(permissionCategory(name)).toBe("agency");
+    expect(AGENCY_PERMISSIONS_MASK).toBe(3154116608);
+  });
+
+  it("matches the server's grantable set for agency keys", () => {
+    const p = Permissions.fromValue(AGENCY_KEY_GRANTABLE_PERMISSIONS);
+    expect(p.has("AGENCY_MIGRATE", "AGENCY_READ", "READ_CAMPAIGNS", "IMPORT_TOOLS")).toBe(true);
+    expect(p.hasAny("API_KEYS", "REALTIME_SUBSCRIBE", "CONNECT_EMAILS")).toBe(false);
+    expect(AGENCY_KEY_GRANTABLE_PERMISSIONS).toBe(4278179839);
+  });
+});
+
+describe("mask math above bit 31", () => {
+  it("keeps the top bit through add, has, remove and toArray", () => {
+    const p = Permissions.from("AGENCY_MIGRATE", "agency_read");
+    expect(p.value).toBe(2147483648 + 67108864);
+    expect(p.has("AGENCY_MIGRATE")).toBe(true);
+    expect(p.has("AGENCY_TRANSFER_AI")).toBe(false);
+    expect(p.toScopes()).toEqual(["agency_read", "agency_migrate"]);
+    expect(p.remove("AGENCY_MIGRATE").value).toBe(67108864);
+    expect(p.add("AGENCY_MIGRATE").value).toBe(p.value);
+  });
+
+  it("ORs, ANDs and clears beyond 32 bits", () => {
+    expect(maskOr(2 ** 32, 1)).toBe(2 ** 32 + 1);
+    expect(maskAnd(2 ** 33 + 2 ** 31, 2 ** 31)).toBe(2 ** 31);
+    expect(maskWithout(2 ** 33 + 5, 2 ** 33)).toBe(5);
   });
 });

@@ -23,6 +23,7 @@ import { buildPresenceUpdate, PRESENCE_UPDATE_EVENT, PresenceTracker } from "./p
 import type {
   GatewayOptions,
   GatewayState,
+  GatewayTokenTransport,
   HelloPayload,
   PresenceState,
   PresenceUpdate,
@@ -32,6 +33,7 @@ import type {
 import {
   ChannelTopic,
   describeCloseCode,
+  GATEWAY_TOKEN_HEADER,
   GatewayCloseCode,
   HEARTBEAT_TIMEOUT_CLOSE_CODE,
   isRejectionCloseCode,
@@ -80,6 +82,7 @@ export class Gateway {
   private readonly staticToken: string | undefined;
   private readonly tokenProvider: (() => string | Promise<string>) | undefined;
   private readonly intents: string[] | undefined;
+  private readonly tokenTransport: GatewayTokenTransport;
   private readonly injectedWebSocket: WebSocketCtor | undefined;
   private readonly autoReconnect: boolean;
   private readonly maxReconnectDelayMs: number;
@@ -106,6 +109,7 @@ export class Gateway {
     this.staticToken = options.token;
     this.tokenProvider = options.getToken;
     this.intents = normalizeIntents(options.intents);
+    this.tokenTransport = options.tokenTransport ?? "auto";
     this.injectedWebSocket = options.webSocket;
     this.autoReconnect = options.autoReconnect ?? true;
     this.maxReconnectDelayMs = options.maxReconnectDelayMs ?? DEFAULT_MAX_RECONNECT_DELAY_MS;
@@ -240,9 +244,23 @@ export class Gateway {
     return this.staticToken;
   }
 
-  /** Builds the connection URL with the negotiated version and the token query parameter. */
+  /** Whether the token goes in the handshake header (true) or the query string (false). */
+  private usesHeaderTransport(token: string): boolean {
+    if (this.tokenTransport === "header") return true;
+    if (this.tokenTransport === "query") return false;
+    const keyShaped = token.startsWith("wmbly_") || token.startsWith("wmat_");
+    const browser = typeof (globalThis as { document?: unknown }).document !== "undefined";
+    return keyShaped && !browser;
+  }
+
+  /**
+   * Builds the connection URL with the negotiated version. The token is appended as the
+   * `token` query parameter only for the query transport; API keys and OAuth tokens travel
+   * in the {@link GATEWAY_TOKEN_HEADER} header instead.
+   */
   private buildSocketUrl(token: string): string {
-    return `${this.url}${GATEWAY_SOCKET_PATH}?vsn=${PHOENIX_VSN}&token=${encodeURIComponent(token)}`;
+    const base = `${this.url}${GATEWAY_SOCKET_PATH}?vsn=${PHOENIX_VSN}`;
+    return this.usesHeaderTransport(token) ? base : `${base}&token=${encodeURIComponent(token)}`;
   }
 
   /** Opens a fresh socket and wires up transport handlers. */
@@ -263,7 +281,10 @@ export class Gateway {
 
     const Ctor = await resolveWebSocket(this.injectedWebSocket);
     this.setState("connecting");
-    const socket = new Ctor(this.buildSocketUrl(token));
+    const url = this.buildSocketUrl(token);
+    const socket = this.usesHeaderTransport(token)
+      ? new Ctor(url, { headers: { [GATEWAY_TOKEN_HEADER]: token } })
+      : new Ctor(url);
     this.connection = new Connection(socket, {
       onOpen: () => this.handleOpen(),
       onFrame: (frame) => this.handleFrame(frame),

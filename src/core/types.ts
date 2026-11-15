@@ -33,7 +33,12 @@ export interface ClientOptions {
   appBaseUrl?: string;
   /** Realtime gateway base URL. Defaults to `wss://realtime.warmbly.com`. */
   gatewayUrl?: string;
-  /** Default organization id, used as the gateway channel and for convenience. */
+  /**
+   * Default organization (workspace) id. Used as the gateway channel, and sent on every REST
+   * request as the `Warmbly-Organization` header, which tells an agency API key
+   * (`wmagency_...`) which client workspace to act on. Workspace keys and OAuth tokens are
+   * already bound to one workspace and the server ignores the header for them.
+   */
   organizationId?: string;
   /** Custom `fetch` implementation. Defaults to the platform global. */
   fetch?: FetchLike;
@@ -68,6 +73,11 @@ export interface RequestOptions {
   headers?: Record<string, string>;
   /** Idempotency key for safe retries of a mutation. Auto-generated for retried mutations if omitted. */
   idempotencyKey?: string;
+  /**
+   * The client workspace this request acts on, sent as `Warmbly-Organization`. Overrides the
+   * client's `organizationId` for one call; only agency API keys read it.
+   */
+  organizationId?: string;
   /** Caller-provided abort signal. */
   signal?: AbortSignal;
   /** Override the client timeout (ms) for this request. */

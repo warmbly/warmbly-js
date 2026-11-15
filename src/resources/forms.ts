@@ -1,4 +1,4 @@
-import type { RequestOptions } from "../core/types";
+import type { PaginationMeta, RequestOptions } from "../core/types";
 import { APIResource } from "./base";
 
 /** A hosted form's publication state. */
@@ -107,15 +107,23 @@ export interface FormSubmission {
 export interface ListFormSubmissionsParams {
   /** Page size, 1..100 (default 50). */
   limit?: number;
-  /** Return submissions strictly older than this RFC 3339 timestamp. */
+  /** The `pagination.next_cursor` of the previous page. Preferred over `before`; send one or the other. */
+  cursor?: string;
+  /**
+   * Return submissions strictly older than this RFC 3339 timestamp. The older way to page,
+   * still accepted; it can skip submissions that share a timestamp, so prefer `cursor`.
+   */
   before?: string;
   [key: string]: unknown;
 }
 
-/** A page of submissions. Paginate by passing the oldest `created_at` as `before`. */
+/** A page of submissions. Paginate by passing `pagination.next_cursor` back as `cursor`. */
 export interface FormSubmissionList {
   data: FormSubmission[];
+  /** Same as `pagination.has_more`, kept at the top level for older clients. */
   has_more: boolean;
+  /** The cursor envelope. Absent on servers that predate cursor paging; fall back to `before`. */
+  pagination?: PaginationMeta;
   [key: string]: unknown;
 }
 
@@ -174,8 +182,50 @@ export interface FormsDomainStatus {
   forms_domain_verified_at?: string | null;
   /** The value to put in the `CNAME`. */
   cname_target?: string;
-  status?: string;
+  /** The ownership `TXT` record a new verification needs beside the `CNAME`. */
+  txt_name?: string;
+  txt_value?: string;
+  /**
+   * Machine-readable: `verified`, `unset`, `no_target`, `not_found`, `wrong_target`,
+   * `proof_missing` or `lookup_error`.
+   */
+  status?: FormsDomainCheckStatus;
   message?: string;
+  /** What DNS actually returned, to compare with what was typed. */
+  observed?: string;
+  /** The deployment's own forms host does not resolve: an operator problem, not a typo. */
+  forms_host_unresolvable?: boolean;
+  /**
+   * `TXT` records the edge provider in front of the forms service still needs before it
+   * serves the domain over HTTPS. Absent when none are outstanding.
+   */
+  edge_records?: FormsDomainDnsRecord[];
+  [key: string]: unknown;
+}
+
+/** The result of a forms domain DNS check. */
+export type FormsDomainCheckStatus =
+  | "verified"
+  | "unset"
+  | "no_target"
+  | "not_found"
+  | "wrong_target"
+  | "proof_missing"
+  | "lookup_error"
+  | (string & {});
+
+/** A DNS record the forms domain still needs, with whether it is in place. */
+export interface FormsDomainDnsRecord {
+  /** What the record is for. */
+  purpose: string;
+  /** The record type, e.g. `TXT`. */
+  type: string;
+  name: string;
+  value: string;
+  /** Whether DNS already serves it. */
+  ok: boolean;
+  /** Improves the result but is not required to verify. */
+  optional?: boolean;
   [key: string]: unknown;
 }
 
@@ -254,9 +304,13 @@ export class Forms extends APIResource {
   }
 
   /**
-   * Lists submissions, newest first. Paginate by passing the oldest `created_at` as `before`.
+   * Lists submissions, newest first. Paginate by passing `pagination.next_cursor` back as
+   * `cursor` while `has_more` is true.
    * @example
-   * const { data, has_more } = await warmbly.forms.listSubmissions("form_1", { limit: 100 });
+   * const page = await warmbly.forms.listSubmissions("form_1", { limit: 100 });
+   * if (page.pagination?.next_cursor) {
+   *   await warmbly.forms.listSubmissions("form_1", { cursor: page.pagination.next_cursor });
+   * }
    */
   listSubmissions(id: string, params?: ListFormSubmissionsParams): Promise<FormSubmissionList> {
     return this.http.get<FormSubmissionList>(this.path("forms", id, "submissions"), {

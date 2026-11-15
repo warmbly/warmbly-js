@@ -35,6 +35,8 @@ WARMBLY_API_KEY=wmbly_... npx tsx examples/rest.ts
 | File | Shows |
 | --- | --- |
 | [`campaigns.ts`](./campaigns.ts) | Campaign lifecycle: create, steps, start/stop, logs, test email |
+| [`agency.ts`](./agency.ts) | Agency keys: clients, send pool, cross-client inbox, caps, AI transfers, `withOrganization` |
+| [`reports-and-migrations.ts`](./reports-and-migrations.ts) | Client reports with links and schedules, and migrating in from another outreach tool |
 | [`contacts.ts`](./contacts.ts) | Add, search, lookup, notes, timeline, bulk update, export |
 | [`segments-and-forms.ts`](./segments-and-forms.ts) | Live audiences, campaign estimates and linked segments, hosted forms, personalized links |
 | [`suppressions-and-agent-tools.ts`](./suppressions-and-agent-tools.ts) | The suppression list, and the tool registry for function-calling agents |

@@ -45,12 +45,36 @@ export interface GatewayOptions {
   intents?: string[];
   /** Custom WebSocket constructor. Defaults to the platform global, or lazy `ws` on Node. */
   webSocket?: WebSocketCtor;
+  /**
+   * How the token reaches the handshake. The server refuses an API key (`wmbly_...`) or OAuth
+   * access token (`wmat_...`) in the URL with code 4003, so those travel in the
+   * `X-Warmbly-Token` header; a short-lived connection JWT goes in the `token` query
+   * parameter. `"auto"` (the default) picks by token shape and falls back to the query
+   * string in a browser, where a WebSocket cannot set headers. Force `"header"` or `"query"`
+   * to override (for example a self-hosted gateway that still allows query credentials).
+   */
+  tokenTransport?: GatewayTokenTransport;
   /** Whether to reconnect automatically on an unexpected close. Defaults to `true`. */
   autoReconnect?: boolean;
   /** Cap on the exponential reconnect backoff, in milliseconds. Defaults to 30000. */
   maxReconnectDelayMs?: number;
   /** Optional logger; defaults to a no-op so nothing is written to the console. */
   logger?: GatewayLogger;
+}
+
+/** Where the gateway token is sent on the handshake: see {@link GatewayOptions.tokenTransport}. */
+export type GatewayTokenTransport = "auto" | "header" | "query";
+
+/** The request header that carries an API key or OAuth access token on the handshake. */
+export const GATEWAY_TOKEN_HEADER = "X-Warmbly-Token";
+
+/**
+ * The options bag a header-capable WebSocket constructor (`ws`, Node's global `WebSocket`,
+ * Bun, Deno) accepts in place of subprotocols.
+ */
+export interface WebSocketInit {
+  /** Extra handshake request headers. */
+  headers?: Record<string, string>;
 }
 
 /**
@@ -173,7 +197,7 @@ export interface WebSocketLike {
  * const socket = new ctor("wss://example.com");
  */
 export interface WebSocketCtor {
-  new (url: string, protocols?: string | string[]): WebSocketLike;
+  new (url: string, protocols?: string | string[] | WebSocketInit): WebSocketLike;
 }
 
 /** Standard WebSocket `readyState` values, redeclared so no DOM lib is required. */
@@ -196,9 +220,15 @@ export const WS_READY_STATE = {
  * });
  */
 export enum GatewayCloseCode {
-  /** No token was supplied at the handshake. */
+  /**
+   * No token was supplied, or an API key or OAuth token was sent in the URL instead of the
+   * `X-Warmbly-Token` header.
+   */
   NOT_AUTHENTICATED = 4003,
-  /** The token was expired or invalid; re-mint and reconnect. */
+  /**
+   * The token was expired, already used (a connection JWT opens one socket), its session
+   * signed out, or the key or access token is invalid, inactive, expired or revoked.
+   */
   AUTH_FAILED = 4004,
   /** A malformed topic, for example an id that is not a UUID. Retrying will not help. */
   MALFORMED_TOPIC = 4005,
@@ -229,9 +259,9 @@ export function isRejectionCloseCode(code: number | undefined): code is GatewayC
 export function describeCloseCode(code: number | undefined): string {
   switch (code) {
     case GatewayCloseCode.NOT_AUTHENTICATED:
-      return "not authenticated: no token was supplied";
+      return "not authenticated: no token was supplied, or an API key or OAuth token was sent in the URL instead of the X-Warmbly-Token header";
     case GatewayCloseCode.AUTH_FAILED:
-      return "auth failed: token expired or invalid";
+      return "auth failed: token expired, already used, session signed out, or invalid; mint a new connection token or check the key";
     case GatewayCloseCode.MALFORMED_TOPIC:
       return "malformed topic: fix the channel id, retrying will not help";
     case GatewayCloseCode.RATE_LIMITED:

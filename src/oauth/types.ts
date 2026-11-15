@@ -238,8 +238,15 @@ export interface OAuthApplication {
   webhook_events?: string[];
   /** Requested scopes as a uint64 bitmask. */
   scopes: number;
-  /** Lifecycle status. */
-  status: string;
+  /** Lifecycle status: `active` or `disabled`. */
+  status: "active" | "disabled" | (string & {});
+  /** A public client: PKCE, no secret. */
+  is_public?: boolean;
+  /** True for clients created through RFC 7591 dynamic registration. */
+  dynamically_registered?: boolean;
+  /** Set when an operator suspended the app; the owner cannot lift it. */
+  suspended_at?: string;
+  suspended_reason?: string;
   /** ISO-8601 creation timestamp. */
   created_at: string;
   /** ISO-8601 last-update timestamp. */
@@ -294,25 +301,91 @@ export interface OAuthApplicationWithSecret extends OAuthApplication {
 }
 
 /**
- * Health information for a single webhook endpoint of an application.
+ * Whether the workspace and caller may register or publish OAuth apps, reported
+ * alongside the app list. When `blocked`, registering or publishing answers 403
+ * `developer_access_blocked`.
+ */
+export interface OAuthDeveloperAccess {
+  blocked: boolean;
+  reason?: string;
+}
+
+/** The status of a directory listing. `hidden` listings were taken down by an operator. */
+export type AppListingStatus = "published" | "featured" | "hidden" | (string & {});
+
+/** An OAuth app's page in the community directory. */
+export interface AppListing {
+  application_id: string;
+  organization_id: string;
+  /** The link: 3 to 48 lowercase letters, numbers or single dashes. */
+  slug: string;
+  tagline: string;
+  description: string;
+  /** One of `crm`, `automation`, `notifications`, `meetings`, `data`, `verification`, `ai`, `other`. */
+  category: string;
+  install_url: string;
+  support_url: string;
+  privacy_url: string;
+  status: AppListingStatus;
+  /** Why an operator hid the listing. */
+  status_note?: string;
+  status_at?: string;
+  submitted_at: string;
+  created_at: string;
+  updated_at: string;
+  [key: string]: unknown;
+}
+
+/** Body for publishing or replacing an app's directory listing. The whole listing is replaced. */
+export interface AppListingWrite {
+  /** 3 to 48 lowercase letters, numbers or single dashes, starting and ending with a letter or number. */
+  slug: string;
+  /** One line, at most 120 characters. */
+  tagline: string;
+  /** Optional, at most 2,000 characters. */
+  description?: string;
+  /** One of `crm`, `automation`, `notifications`, `meetings`, `data`, `verification`, `ai`, `other`. */
+  category: string;
+  /** Where Install takes people. Must be https. */
+  install_url: string;
+  /** Optional https link. */
+  support_url?: string;
+  /** Optional https link. */
+  privacy_url?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * A webhook endpoint of an application, with the health the platform tracks. The server
+ * returns its endpoint rows as-is.
  *
  * @example
  * const { endpoints } = await warmbly.oauth.applications.listWebhookEndpoints("wmcid_...");
- * for (const e of endpoints) console.log(e.url, e.healthy);
+ * for (const e of endpoints) console.log(e.url, e.enabled, e.consecutive_failures);
  */
 export interface WebhookEndpointHealth {
+  id?: string;
+  /** The workspace that installed the app. */
+  organization_id?: string;
   /** The endpoint URL. */
   url?: string;
-  /** Whether the endpoint is currently considered healthy. */
-  healthy?: boolean;
-  /** HTTP status of the most recent delivery attempt. */
-  last_status?: number;
+  enabled?: boolean;
+  event_types?: string[];
   /** ISO-8601 timestamp of the most recent successful delivery. */
   last_success_at?: string;
   /** ISO-8601 timestamp of the most recent failed delivery. */
   last_failure_at?: string;
+  last_failure_reason?: string;
   /** Count of consecutive failures. */
   consecutive_failures?: number;
+  oauth_application_id?: string;
+  verified_at?: string;
+  ownership_confirmed?: boolean;
+  /** Set when repeated failures disabled the endpoint. */
+  auto_disabled_at?: string;
+  disabled_reason?: string;
+  created_at?: string;
+  updated_at?: string;
   /** Forward-compatible: additional fields. */
   [key: string]: unknown;
 }
@@ -328,20 +401,27 @@ export interface WebhookEndpointHealth {
 export interface WebhookDelivery {
   /** The delivery id. */
   id: string;
+  endpoint_id?: string;
+  organization_id?: string;
   /** The event type that was delivered. */
   event_type?: string;
-  /** Delivery status, e.g. `"delivered"`, `"failed"`, `"pending"`. */
+  event_id?: string;
+  /** The JSON payload that was sent. */
+  payload?: unknown;
+  /** Delivery status: `pending`, `in_flight`, `delivered`, `failed` or `abandoned`. */
   status?: string;
-  /** The destination URL. */
-  url?: string;
-  /** HTTP response status of the attempt. */
-  response_status?: number;
   /** Number of attempts made. */
-  attempts?: number;
+  attempt_count?: number;
+  max_attempts?: number;
+  next_attempt_at?: string;
+  last_attempt_at?: string;
+  /** HTTP response status of the last attempt. */
+  response_status?: number;
+  response_body_excerpt?: string;
+  error_reason?: string;
   /** ISO-8601 creation timestamp. */
   created_at?: string;
-  /** ISO-8601 timestamp of the last delivery attempt. */
-  delivered_at?: string;
+  updated_at?: string;
   /** Forward-compatible: additional fields. */
   [key: string]: unknown;
 }
@@ -351,25 +431,41 @@ export interface WebhookDelivery {
  *
  * @example
  * const apps: AuthorizedApp[] = await warmbly.oauth.applications.listAuthorizedApps();
- * for (const app of apps) console.log(app.name, app.scopes);
+ * for (const app of apps) console.log(app.name, app.application_id);
  */
 export interface AuthorizedApp {
-  /** The authorization (grant) id, used to revoke. */
-  id: string;
-  /** The application id. */
-  application_id?: string;
-  /** The application's client id (`wmcid_...`). */
-  client_id?: string;
+  /** The application id. Pass it to `revokeAuthorizedApp`. */
+  application_id: string;
   /** The application display name. */
   name?: string;
   /** The application logo URL. */
   logo_url?: string;
-  /** Granted scopes as scope strings. */
-  scopes?: string[];
+  website_url?: string;
+  /** Granted scopes as a uint64 bitmask. */
+  scopes?: number;
   /** ISO-8601 timestamp the authorization was granted. */
   authorized_at?: string;
   /** ISO-8601 timestamp the authorization was last used. */
   last_used_at?: string;
   /** Forward-compatible: additional fields. */
+  [key: string]: unknown;
+}
+
+/**
+ * One member's live authorization of an app, as a workspace admin sees it
+ * (`GET /oauth/workspace-authorizations`).
+ */
+export interface WorkspaceAuthorization {
+  application_id: string;
+  name?: string;
+  logo_url?: string;
+  website_url?: string;
+  user_id: string;
+  user_email?: string;
+  user_name?: string;
+  /** Granted scopes as a uint64 bitmask. */
+  scopes?: number;
+  authorized_at?: string;
+  last_used_at?: string;
   [key: string]: unknown;
 }

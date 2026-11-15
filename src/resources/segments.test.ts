@@ -50,6 +50,25 @@ describe("Segments", () => {
     expect(out[0]?.field).toBe("email_domain");
   });
 
+  it("fields decodes option_labels on the location enums", async () => {
+    const { http } = clientWith({
+      data: [
+        {
+          field: "country",
+          label: "Country",
+          group: "Location",
+          kind: "enum",
+          options: ["DE", "US"],
+          option_labels: { DE: "Germany", US: "United States" },
+        },
+        { field: "location_known", label: "Location known", group: "Location", kind: "bool" },
+      ],
+    });
+    const out = await new Segments(http).fields();
+    expect(out[0]?.option_labels?.DE).toBe("Germany");
+    expect(out[1]?.kind).toBe("bool");
+  });
+
   it("preview POSTs the definition to /segments/preview", async () => {
     const { http, fetchMock } = clientWith({ contact_count: 412 });
     const conditions = [{ field: "custom.industry", operator: "equals", value: "fintech" }];

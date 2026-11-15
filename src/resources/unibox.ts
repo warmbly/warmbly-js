@@ -11,10 +11,22 @@ export type UniboxFolder = "inbox" | "sent" | "drafts" | "archive" | "spam" | "t
  */
 export interface UniboxItem {
   id: string;
+  /** The mailbox that holds the message. */
+  email_id?: string;
   thread_id?: string;
   subject?: string;
-  from?: string;
+  /** List and thread rows: sender addresses. */
+  from_addr?: string[];
+  /** List and thread rows: recipient addresses. */
+  to_addr?: string[];
+  /** {@link Unibox.get} only: sender addresses. */
+  from?: string[];
+  /** {@link Unibox.get} only: recipient addresses. */
+  to?: string[];
+  cc?: string[];
+  bcc?: string[];
   seen?: boolean;
+  /** {@link Unibox.get} only: the canonical folder. */
   folder?: UniboxFolder | (string & {});
   /** A one-line summary, not the body. */
   snippet?: string;
@@ -24,14 +36,56 @@ export interface UniboxItem {
   body_plain?: string;
   /** True on the rare message whose stored body could not be read. */
   body_truncated?: boolean;
+  internal_date?: string;
+  /** List rows collapse to one row per thread: messages in the conversation. */
+  message_count?: number;
+  /** List rows: true when any message in the thread is unseen. */
+  has_unread?: boolean;
+  /** The conversation's labels (id, title, color). */
+  labels?: Array<{ id: string; title?: string; color?: string; [key: string]: unknown }>;
+  /** Thread reads: the workspace mailbox that sent the email this message answers, when it is not `email_id`. */
+  answers_mailbox_id?: string;
+  /** List reads: the campaign a send in this conversation belongs to. */
+  campaign_id?: string;
   snoozed_until?: string | null;
   created_at?: string;
+  [key: string]: unknown;
+}
+
+/** Counters returned by {@link Unibox.overview}. Unknown counters pass through. */
+export interface UniboxOverview {
+  unread?: number;
+  today?: number;
+  week?: number;
+  snoozed?: number;
+  awaiting_reply?: number;
+  /** Conversations no person wrote in. Left out of the unread, today, week and inbox counts. */
+  automated?: number;
+  automated_unread?: number;
+  awaiting_agent_draft?: number;
+  /** Threads with a mailbox or pending agent draft, each counted once. */
+  drafts?: number;
+  scheduled_pending?: number;
+  scheduled_pending_max?: number;
+  folders?: Array<Record<string, unknown>>;
   [key: string]: unknown;
 }
 
 /** A scheduled (queued) unibox task. */
 export interface UniboxScheduledTask {
   task_id: string;
+  scheduled_at?: string;
+  created_at?: string;
+  /** The sending mailbox. */
+  account_id?: string;
+  account_email?: string;
+  account_name?: string;
+  to?: string[];
+  cc?: string[];
+  bcc?: string[];
+  subject?: string;
+  snippet?: string;
+  thread_id?: string;
   [key: string]: unknown;
 }
 
@@ -39,7 +93,40 @@ export interface UniboxScheduledTask {
 export interface ListUniboxParams {
   cursor?: string;
   limit?: number;
-  status?: string;
+  /** Filter by sender address. */
+  from?: string;
+  /** Filter by subject. */
+  subject?: string;
+  /** `true` lists unread messages only. */
+  unseen?: boolean;
+  /** `true` lists only snoozed threads; `any` ignores snooze state. Absent hides snoozed threads. */
+  snoozed?: boolean | "any";
+  /** `true` lists conversations waiting on a reply from the other side. */
+  awaiting_reply?: boolean;
+  /** `true` lists conversations holding a pending inbox-agent draft. */
+  agent_drafts?: boolean;
+  /** Inclusive lower bound: `YYYY-MM-DD` or an RFC 3339 timestamp. */
+  since?: string;
+  /** Upper bound: a `YYYY-MM-DD` date keeps that whole UTC day; an RFC 3339 instant is exclusive. */
+  until?: string;
+  /** Conversations traced to a send of this campaign. */
+  campaign_id?: string;
+  /** Conversations traced to a send to this contact, or exchanged with their address. */
+  contact_id?: string;
+  /** One mailbox id, or a comma-separated list. */
+  email_id?: string;
+  /** Comma-separated mailbox ids. */
+  email_ids?: string;
+  /** Comma-separated mailbox tag ids. */
+  tag_ids?: string;
+  /** Comma-separated conversation label ids; a thread matches if it carries any. */
+  category_ids?: string;
+  /** `true` lists threads with no labels at all. */
+  uncategorized?: boolean;
+  /** `true` lists only conversations no person wrote in; `false` leaves them out. */
+  automated?: boolean;
+  /** `true` puts archived conversations back into an unscoped list. */
+  include_archived?: boolean;
   /**
    * Match either side of the exchange (sender or recipient), for "every conversation
    * with this person".
@@ -58,8 +145,77 @@ export interface ListUniboxParams {
  */
 export interface MarkSeenParams {
   email_ids?: string[];
+  /** Mark whole conversations: each entry is a thread id, or a message id for mail with no thread. */
+  thread_ids?: string[];
   folder?: UniboxFolder;
   seen: boolean;
+  [key: string]: unknown;
+}
+
+/** A folder a message may be filed into from the unibox. `sent`, `drafts` and `spam` are provider verdicts. */
+export type FilableFolder = "inbox" | "archive" | "trash";
+
+/** Body for {@link Unibox.moveFolder}: files messages and/or whole conversations into one folder. */
+export interface MoveFolderParams {
+  /** Message ids to file. */
+  email_ids?: string[];
+  /** Whole conversations to file: a thread id, or a message id for mail with no thread. */
+  thread_ids?: string[];
+  /** Archive = `archive`, Delete = `trash`, Move to inbox = `inbox`. */
+  folder: FilableFolder;
+  [key: string]: unknown;
+}
+
+/** Body for {@link Unibox.upsertThreadDraft}. */
+export interface UpsertThreadDraftParams {
+  /** The conversation to draft on, at most 998 characters. */
+  thread_id: string;
+  /** The draft reply, at most 8000 characters. */
+  body: string;
+  /** A short slug naming the writer (letters, digits, dot, dash, underscore; at most 40). Stored as the draft's model. */
+  source: string;
+  /** What the inbound message was, at most 40 characters. */
+  intent_class?: string;
+  confidence?: number;
+  [key: string]: unknown;
+}
+
+/** The result of {@link Unibox.upsertThreadDraft}. */
+export interface UpsertThreadDraftResult {
+  id: string;
+  /** Always `pending` on success. */
+  status: "pending" | (string & {});
+  /** True when a new draft was created, false when the pending one was replaced. */
+  created: boolean;
+  [key: string]: unknown;
+}
+
+/** Body for {@link Unibox.setThreadLabels}: the full desired label set. */
+export interface SetThreadLabelsParams {
+  thread_id: string;
+  /** Conversation label (category) ids. Replaces the thread's labels; send `[]` to clear. */
+  category_ids: string[];
+  [key: string]: unknown;
+}
+
+/** Body for {@link Unibox.snooze}. Name the thread with `thread_id` and/or `thread_ids`. */
+export interface SnoozeParams {
+  thread_id?: string;
+  /** Snooze a whole selection in one call. */
+  thread_ids?: string[];
+  /** When the threads come back (RFC 3339). Required. */
+  snoozed_until: string;
+  [key: string]: unknown;
+}
+
+/** One of your snoozed threads. */
+export interface UniboxSnooze {
+  id: string;
+  user_id: string;
+  thread_id: string;
+  snoozed_until: string;
+  created_at: string;
+  updated_at: string;
   [key: string]: unknown;
 }
 
@@ -216,10 +372,21 @@ export interface SaveComposeDraftParams {
 export interface AgentDraft {
   id: string;
   organization_id?: string;
+  email_account_id?: string;
+  owner_user_id?: string;
   thread_id?: string;
   source_message_id?: string;
+  contact_id?: string;
+  campaign_id?: string;
+  to_addr?: string;
+  subject?: string;
+  in_reply_to?: string;
   /** The drafted reply body. */
   body?: string;
+  intent_class?: string;
+  confidence?: number;
+  /** Who wrote the draft (the `source` slug for API-written drafts). */
+  model?: string;
   status?: "pending" | "approved" | "discarded" | string;
   created_at?: string;
   updated_at?: string;
@@ -231,8 +398,8 @@ export interface AgentDraft {
  * and scheduled sends. Reachable as `warmbly.unibox`.
  *
  * @example
- * const page = await warmbly.unibox.list({ status: "unread" });
- * await warmbly.unibox.reply({ thread_id: page.data[0]!.thread_id, body: "Thanks!" });
+ * const page = await warmbly.unibox.list({ unseen: true });
+ * await warmbly.unibox.moveFolder({ thread_ids: [page.data[0]!.thread_id!], folder: "archive" });
  */
 export class Unibox extends APIResource {
   /**
@@ -245,12 +412,13 @@ export class Unibox extends APIResource {
   }
 
   /**
-   * Returns conversation counts (e.g. unread totals).
+   * Returns the unseen message count, optionally for one mailbox (`email_id`). Needs
+   * `READ_UNIBOX`.
    * @example
-   * const counts = await warmbly.unibox.count();
+   * const { count } = await warmbly.unibox.count();
    */
-  count(params?: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return this.http.get<Record<string, unknown>>("unibox/count", { query: params });
+  count(params?: { email_id?: string; [key: string]: unknown }): Promise<{ count: number }> {
+    return this.http.get<{ count: number }>("unibox/count", { query: params });
   }
 
   /**
@@ -258,8 +426,8 @@ export class Unibox extends APIResource {
    * @example
    * const overview = await warmbly.unibox.overview();
    */
-  overview(params?: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return this.http.get<Record<string, unknown>>("unibox/overview", { query: params });
+  overview(opts?: RequestOptions): Promise<UniboxOverview> {
+    return this.http.get<UniboxOverview>("unibox/overview", opts);
   }
 
   /**
@@ -272,47 +440,105 @@ export class Unibox extends APIResource {
   }
 
   /**
-   * Fetches a full thread (via the `thread` query, e.g. by `thread_id`).
+   * Fetches a full thread. Name it with `thread_id` (or `id`); `email_id` (or `email`)
+   * narrows it to one mailbox, and `cursor` and `limit` page through the messages.
    * @example
    * const thread = await warmbly.unibox.thread({ thread_id: "t_1" });
    */
-  thread(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+  thread(params: {
+    thread_id?: string;
+    id?: string;
+    email_id?: string;
+    cursor?: string;
+    limit?: number;
+    [key: string]: unknown;
+  }): Promise<Record<string, unknown>> {
     return this.http.get<Record<string, unknown>>("unibox/thread", { query: params });
   }
 
   /**
-   * Reads the labels on a thread.
+   * Reads the labels on a thread. The server answers `{ data: [...] }`. Needs `READ_UNIBOX`.
    * @example
-   * const labels = await warmbly.unibox.getThreadLabels({ thread_id: "t_1" });
+   * const { data } = await warmbly.unibox.getThreadLabels({ thread_id: "t_1" });
    */
-  getThreadLabels(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+  getThreadLabels(params: {
+    thread_id: string;
+    [key: string]: unknown;
+  }): Promise<Record<string, unknown>> {
     return this.http.get<Record<string, unknown>>("unibox/thread/labels", { query: params });
   }
 
   /**
-   * Replaces the labels on a thread.
+   * Replaces the labels on a thread with the given conversation label ids
+   * (`category_ids`; only the workspace's own labels attach). Needs `WRITE_UNIBOX`.
    * @example
-   * await warmbly.unibox.setThreadLabels({ thread_id: "t_1", labels: ["lead"] });
+   * await warmbly.unibox.setThreadLabels({ thread_id: "t_1", category_ids: ["cat_1"] });
    */
-  setThreadLabels(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+  setThreadLabels(params: SetThreadLabelsParams): Promise<Record<string, unknown>> {
     return this.http.put<Record<string, unknown>>("unibox/thread/labels", { body: params });
   }
 
   /**
    * Marks messages as read or unread, org-wide: an explicit batch of up to 500 ids, or
-   * a whole canonical folder. Send one of `email_ids` or `folder`.
+   * a whole canonical folder. Send one of `email_ids`, `thread_ids` or `folder`. The
+   * server echoes the request body. Needs `WRITE_UNIBOX`.
    * @example
    * await warmbly.unibox.markSeen({ email_ids: ["ub_1"], seen: true });
    * await warmbly.unibox.markSeen({ folder: "inbox", seen: true });
    */
-  markSeen(params: MarkSeenParams): Promise<Record<string, unknown>> {
-    return this.http.patch<Record<string, unknown>>("unibox/seen", { body: params });
+  markSeen(params: MarkSeenParams): Promise<MarkSeenParams> {
+    return this.http.patch<MarkSeenParams>("unibox/seen", { body: params });
   }
 
   /**
-   * Sends a reply within a thread.
+   * Files messages and/or whole conversations into `inbox`, `archive` or `trash`
+   * (unibox Move to inbox, Archive and Delete). The store changes first, then the move is
+   * relayed to each mailbox that has `relay_folder_moves` on. Naturally idempotent: the
+   * body names the destination. The server echoes the request body. Needs `WRITE_UNIBOX`.
    * @example
-   * await warmbly.unibox.reply({ thread_id: "t_1", body: "Thanks!" });
+   * await warmbly.unibox.moveFolder({ thread_ids: ["t_1"], folder: "archive" });
+   */
+  moveFolder(params: MoveFolderParams, opts?: RequestOptions): Promise<MoveFolderParams> {
+    return this.http.patch<MoveFolderParams>("unibox/folder", { ...opts, body: params });
+  }
+
+  /**
+   * Writes a reply draft for the newest inbound message on a thread: replaces the
+   * thread's pending draft or creates one, for review in the Drafts view. It never sends.
+   * Naturally idempotent per thread. A 404 `thread_not_found` means no inbound message
+   * exists; 409 `already_sent` or `draft_discarded` mean the newest inbound message has
+   * already been handled. Needs `WRITE_UNIBOX`.
+   * @example
+   * const { id, created } = await warmbly.unibox.upsertThreadDraft({
+   *   thread_id: "t_1",
+   *   body: "Thanks, Tuesday works.",
+   *   source: "my-agent",
+   *   intent_class: "meeting_request",
+   *   confidence: 0.82,
+   * });
+   */
+  upsertThreadDraft(
+    params: UpsertThreadDraftParams,
+    opts?: RequestOptions,
+  ): Promise<UpsertThreadDraftResult> {
+    return this.http.put<UpsertThreadDraftResult>("unibox/ai-drafts/by-thread", {
+      ...opts,
+      body: params,
+    });
+  }
+
+  /**
+   * Sends (or schedules) a reply or forward. `email_account_id`, `to` and `subject` are
+   * required; provide `body_html` and/or `body_plain`; `thread_id` and `in_reply_to`
+   * thread it; `forward_message_id` makes it a forward. Needs `WRITE_UNIBOX`.
+   * @example
+   * await warmbly.unibox.reply({
+   *   email_account_id: "mb_1",
+   *   to: ["jordan@acme.com"],
+   *   subject: "Re: Intro",
+   *   thread_id: "t_1",
+   *   body_plain: "Thanks!",
+   * });
    */
   reply(params: Record<string, unknown>): Promise<Record<string, unknown>> {
     return this.http.post<Record<string, unknown>>("unibox/reply", { body: params });
@@ -320,7 +546,7 @@ export class Unibox extends APIResource {
 
   /**
    * Drafts a reply with AI, grounded in the thread, the contact, and the workspace voice
-   * profile. It never sends — pass the result to {@link Unibox.reply} yourself. Charges
+   * profile. It never sends - pass the result to {@link Unibox.reply} yourself. Charges
    * AI credits.
    *
    * @example
@@ -332,8 +558,8 @@ export class Unibox extends APIResource {
   }
 
   /**
-   * Scores every active mailbox for a recipient — conversation affinity, remaining daily
-   * budget, and domain-auth health — plus the recommended pick, the resolved contact, and
+   * Scores every active mailbox for a recipient - conversation affinity, remaining daily
+   * budget, and domain-auth health - plus the recommended pick, the resolved contact, and
    * the address's suppression state.
    *
    * @example
@@ -354,7 +580,7 @@ export class Unibox extends APIResource {
    * const sent = await warmbly.unibox.compose({
    *   to: ["jordan@acme.com"],
    *   subject: "Quick question",
-   *   body_plain: "Hi Jordan — ...",
+   *   body_plain: "Hi Jordan - ...",
    * });
    * console.log(sent.account_email, sent.picked_reason);
    */
@@ -426,7 +652,7 @@ export class Unibox extends APIResource {
    * approval can never double-send; safe to retry with an `Idempotency-Key`.
    *
    * @example
-   * await warmbly.unibox.approveAgentDraft("ad_1", { body: "Thanks — Tuesday works." });
+   * await warmbly.unibox.approveAgentDraft("ad_1", { body: "Thanks - Tuesday works." });
    */
   approveAgentDraft(
     id: string,
@@ -451,42 +677,49 @@ export class Unibox extends APIResource {
   }
 
   /**
-   * Lists active snoozes.
+   * Lists your active snoozes. Needs `READ_UNIBOX`.
    * @example
    * const snoozes = await warmbly.unibox.listSnoozes();
    */
-  listSnoozes(params?: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return this.http.get<Record<string, unknown>>("unibox/snoozes", { query: params });
+  listSnoozes(opts?: RequestOptions): Promise<{ data: UniboxSnooze[] }> {
+    return this.http.get<{ data: UniboxSnooze[] }>("unibox/snoozes", opts);
   }
 
   /**
-   * Snoozes a conversation until a given time.
+   * Snoozes one or more conversations until `snoozed_until`; a second call on the same
+   * thread moves the time. Naming exactly one thread answers with that snooze row; naming
+   * several answers `{ data }`. Needs `WRITE_UNIBOX`.
    * @example
-   * await warmbly.unibox.snooze({ thread_id: "t_1", until: "2026-07-01T09:00:00Z" });
+   * await warmbly.unibox.snooze({ thread_id: "t_1", snoozed_until: "2026-07-01T09:00:00Z" });
    */
-  snooze(params: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return this.http.post<Record<string, unknown>>("unibox/snooze", { body: params });
+  snooze(params: SnoozeParams): Promise<UniboxSnooze | { data: UniboxSnooze[] }> {
+    return this.http.post<UniboxSnooze | { data: UniboxSnooze[] }>("unibox/snooze", {
+      body: params,
+    });
   }
 
   /**
-   * Removes a snooze. The thread is identified by the `thread_id` query parameter.
+   * Removes snoozes. The thread is identified by the `thread_id` query parameter (a
+   * comma-separated list unsnoozes several). Deleting one that does not exist still
+   * succeeds (204). Needs `WRITE_UNIBOX`.
    * @example
    * await warmbly.unibox.unsnooze({ thread_id: "t_1" });
    */
-  unsnooze(params: {
-    thread_id: string;
-    [key: string]: unknown;
-  }): Promise<Record<string, unknown>> {
-    return this.http.delete<Record<string, unknown>>("unibox/snooze", { query: params });
+  unsnooze(params: { thread_id: string; [key: string]: unknown }): Promise<void> {
+    return this.http.delete<void>("unibox/snooze", { query: params });
   }
 
   /**
-   * Lists scheduled (queued) sends.
+   * Lists scheduled (queued) sends, optionally for one thread (`thread_id`). Needs
+   * `READ_UNIBOX`.
    * @example
    * const scheduled = await warmbly.unibox.scheduled();
    */
-  scheduled(params?: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return this.http.get<Record<string, unknown>>("unibox/scheduled", { query: params });
+  scheduled(params?: {
+    thread_id?: string;
+    [key: string]: unknown;
+  }): Promise<{ data: UniboxScheduledTask[] }> {
+    return this.http.get<{ data: UniboxScheduledTask[] }>("unibox/scheduled", { query: params });
   }
 
   /**

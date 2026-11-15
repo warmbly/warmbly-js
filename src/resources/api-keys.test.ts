@@ -234,3 +234,59 @@ describe("ApiKeys.revokeSelf", () => {
     expect(lastCall(fetchMock).url).toMatch(/\/api-keys\/self$/);
   });
 });
+
+describe("ApiKeys.deletePermanently", () => {
+  it("DELETEs /api-keys/:id/permanent and decodes the acknowledgement", async () => {
+    const { http, fetchMock } = clientWith({ status: "deleted" });
+    const out = await new ApiKeys(http).deletePermanently("key 1");
+    const { url, init } = lastCall(fetchMock);
+    expect(init.method).toBe("DELETE");
+    expect(url).toMatch(/\/api-keys\/key%201\/permanent$/);
+    expect(init.body).toBeUndefined();
+    expect(out).toEqual({ status: "deleted" });
+  });
+
+  it("surfaces the 409 the server sends while the key is still active", async () => {
+    const { http } = clientWith(
+      {
+        error: {
+          code: "conflict",
+          message: "this key is still active; revoke it before deleting it",
+        },
+      },
+      { status: 409 },
+    );
+    await expect(new ApiKeys(http).deletePermanently("key1")).rejects.toMatchObject({
+      status: 409,
+    });
+  });
+});
+
+describe("ApiKeys.permissions (grantable)", () => {
+  it("decodes grantable and app_scopes alongside the catalog", async () => {
+    const { http } = clientWith({
+      permissions: [],
+      presets: { read_only: 7, full_access: 255 },
+      grantable: 63,
+      app_scopes: 127,
+    });
+    const cat = await new ApiKeys(http).permissions();
+    expect(cat.grantable).toBe(63);
+    expect(cat.app_scopes).toBe(127);
+  });
+});
+
+describe("ApiKeys.permissions (categories)", () => {
+  it("keeps the new workspace bits and their categories", async () => {
+    const { http } = clientWith({
+      permissions: [
+        { name: "CONNECT_EMAILS", value: 1, description: "Connect mailboxes", category: "special" },
+        { name: "MANAGE_REPORTS", value: 2, description: "Client reports", category: "write" },
+        { name: "IMPORT_TOOLS", value: 4, description: "Migrate data", category: "bulk" },
+      ],
+      presets: { read_only: 0, full_access: 6 },
+    });
+    const cat = await new ApiKeys(http).permissions();
+    expect(cat.permissions.map((p) => p.category)).toEqual(["special", "write", "bulk"]);
+  });
+});

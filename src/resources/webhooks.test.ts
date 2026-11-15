@@ -3,7 +3,12 @@ import { resolveClientOptions } from "../core/config";
 import { BadRequestError } from "../core/errors";
 import { HttpClient } from "../core/http";
 import type { FetchLike } from "../core/types";
-import { WEBHOOK_EVENTS, WEBHOOK_FIREHOSE_EVENTS, Webhooks } from "./webhooks";
+import {
+  WEBHOOK_DEPRECATED_EVENTS,
+  WEBHOOK_EVENTS,
+  WEBHOOK_FIREHOSE_EVENTS,
+  Webhooks,
+} from "./webhooks";
 
 function clientWith(
   body: unknown,
@@ -110,19 +115,19 @@ describe("Webhooks", () => {
     expect(url).toContain("/webhooks/deliveries/dlv_1/redeliver");
   });
 
-  it("lists throttle drops with query params", async () => {
-    const { http, fetchMock } = clientWith({ drops: [{ event_type: "campaign.sent" }] });
-    const drops = await new Webhooks(http).throttleDrops({ limit: 10 });
-    expect(drops.drops).toEqual([{ event_type: "campaign.sent" }]);
+  it("lists throttle drops (no query: the server takes no filters)", async () => {
+    const drop = {
+      event_type: "campaign.email_opened",
+      day: "2026-10-01T00:00:00Z",
+      dropped_windows: 3,
+      last_dropped_at: "2026-10-01T14:02:00Z",
+    };
+    const { http, fetchMock } = clientWith({ drops: [drop] });
+    const out = await new Webhooks(http).throttleDrops();
+    expect(out.drops).toEqual([drop]);
     const { url, init } = lastCall(fetchMock);
     expect(init.method).toBe("GET");
-    expect(url).toContain("/webhooks/throttle-drops?limit=10");
-  });
-
-  it("lists throttle drops without params", async () => {
-    const { http, fetchMock } = clientWith({ drops: [] });
-    await new Webhooks(http).throttleDrops();
-    expect(lastCall(fetchMock).url).toContain("/webhooks/throttle-drops");
+    expect(url).toMatch(/\/webhooks\/throttle-drops$/);
   });
 
   it("updates an endpoint with PATCH and full body", async () => {
@@ -163,9 +168,9 @@ describe("Webhooks", () => {
   });
 
   it("verifies an endpoint", async () => {
-    const { http, fetchMock } = clientWith({ status: "verification_sent" });
+    const { http, fetchMock } = clientWith({ status: "challenge_sent" }, { status: 202 });
     const result = await new Webhooks(http).verify("ep1");
-    expect(result.status).toBe("verification_sent");
+    expect(result.status).toBe("challenge_sent");
     const { url, init } = lastCall(fetchMock);
     expect(init.method).toBe("POST");
     expect(url).toContain("/webhooks/ep1/verify");
@@ -230,5 +235,42 @@ describe("WEBHOOK_EVENTS catalog", () => {
     // These are opt-in only, so they are exactly the high-volume per-message events.
     expect(WEBHOOK_FIREHOSE_EVENTS).toContain("campaign.email_opened");
     expect(WEBHOOK_FIREHOSE_EVENTS).not.toContain("campaign.reply_received");
+    // email_account.synced left the firehose; automation.run joined it.
+    expect(WEBHOOK_FIREHOSE_EVENTS).not.toContain("email_account.synced");
+    expect(WEBHOOK_FIREHOSE_EVENTS).toContain("automation.run");
+  });
+
+  it("lists the never-delivered events as a subset of the catalog", () => {
+    const names: readonly string[] = WEBHOOK_EVENTS;
+    for (const event of WEBHOOK_DEPRECATED_EVENTS) {
+      expect(names).toContain(event);
+    }
+    expect(WEBHOOK_DEPRECATED_EVENTS).toContain("campaign.email_delivered");
+    expect(WEBHOOK_DEPRECATED_EVENTS).toContain("email_account.health_changed");
+  });
+
+  it("decodes the catalog's deprecated flag and the list envelope's event_types", async () => {
+    const entry = {
+      type: "campaign.email_delivered",
+      category: "Campaigns",
+      description: "Deprecated, never delivered.",
+      firehose: true,
+      deprecated: true,
+    };
+    const { http, fetchMock } = clientWith({
+      endpoints: [
+        {
+          id: "ep1",
+          url: "https://x.example.com/h",
+          auto_disabled_at: "2026-10-01T00:00:00Z",
+          disabled_reason: "too many failures",
+        },
+      ],
+      event_types: [entry],
+    });
+    const out = await new Webhooks(http).list();
+    expect(lastCall(fetchMock).init.method).toBe("GET");
+    expect(out.event_types?.[0]?.deprecated).toBe(true);
+    expect(out.endpoints[0]?.disabled_reason).toBe("too many failures");
   });
 });

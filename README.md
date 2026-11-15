@@ -82,6 +82,28 @@ const warmbly = new Warmbly({ accessToken: "wmat_..." });
 const warmbly = new Warmbly({ getToken: async () => store.currentAccessToken() });
 ```
 
+### Agency API keys
+
+An agency key (`wmagency_...`) reaches the agency's own endpoints under `warmbly.agency` and
+every client workspace of the agency. Workspace routes need to know which client to act on,
+so set `organizationId` (sent as the `Warmbly-Organization` header) or switch with
+`withOrganization`:
+
+```ts
+const warmbly = new Warmbly({ apiKey: process.env.WARMBLY_AGENCY_KEY });
+
+for (const client of await warmbly.agency.clients.list(agencyId)) {
+  const workspace = warmbly.withOrganization(client.organization_id);
+  const page = await workspace.campaigns.list({ limit: 5 });
+  console.log(client.name, page.data.length);
+}
+```
+
+A request to a workspace route without the header fails with `agency_key_organization_required`,
+and a workspace that is not a client of the agency with `agency_key_not_client`. Agency keys
+cannot manage API keys or OAuth apps or open the realtime gateway. See
+[`examples/agency.ts`](./examples/agency.ts).
+
 ## REST API
 
 Resources hang off the client and mirror the API surface:
@@ -102,9 +124,15 @@ Resources hang off the client and mirror the API surface:
 | `warmbly.aiSkills` | Organization playbooks every AI surface follows |
 | `warmbly.agentTools` | The AI tool registry over HTTP, for function-calling agents without MCP |
 | `warmbly.templates` | Reply templates: render, score, duplicate |
-| `warmbly.crm` | Pipelines, deals, task types, tasks |
+| `warmbly.crm` | Pipelines, deals, task types, tasks, provider sync, owners, settings, list imports |
+| `warmbly.leads` | Lead finder: search, map points, facets, enrichment, export, saved searches, add to contacts |
+| `warmbly.placement` | Inbox placement tests and batches, coverage, seed mailboxes |
+| `warmbly.emailImages` | Images uploaded for use in email templates |
+| `warmbly.reports` | Client reports: build, preview, share by public link, email on a schedule |
+| `warmbly.migrations` | Bring mailboxes, campaigns, leads and the blocklist over from another outreach tool |
+| `warmbly.agency` | Agency endpoints for agency keys: clients and caps, send pool, AI balance and transfers, overview, mailboxes, brand, cross-client inbox, client migrations |
 | `warmbly.meetings` | Booked calls from Calendly and Cal.com, plus manual entries |
-| `warmbly.integrations` | Third-party connections, events, field mappings |
+| `warmbly.integrations` | Third-party connections, events, field mappings, plus `.apollo`, `.clay` and `.salesforce` |
 | `warmbly.automations` | The visual flow builder: trigger events plus action steps |
 | `warmbly.leadSync` | On-demand Google Sheets to contacts sync |
 | `warmbly.webhooks` | Webhook endpoints, deliveries, event types |
@@ -332,6 +360,8 @@ re-sends that join once the budget resets. Every other join refusal is final and
 
 To connect, the token must be an API key with the `REALTIME_SUBSCRIBE` permission, or an OAuth access token with the `realtime_subscribe` scope. The client inherits the token from the `Warmbly` client automatically.
 
+The gateway no longer accepts API keys or OAuth tokens in the URL. The client sends them in the `X-Warmbly-Token` handshake header (`tokenTransport: "auto"`), which `ws`, Node's global `WebSocket`, Bun and Deno support. Browsers cannot set handshake headers, so use a server-side client, or pass the short-lived connection token a signed-in session obtains. Pass `tokenTransport: "query"` only against a self-hosted gateway that still allows it.
+
 Treat event payloads as invalidation signals: they carry ids, not full state. Refetch over REST when you need the current contents.
 
 ## Permissions and scopes
@@ -349,6 +379,11 @@ perms.toScopes();            // ["read_campaigns", "write_contacts"] for OAuth
 Permissions.readOnly();      // the read_only preset
 Permissions.fullAccess();    // the full_access preset
 ```
+
+Masks go past bit 31 (`AGENCY_MIGRATE` is `2147483648`), where JavaScript's `|` and `&`
+operators wrap around. Combine raw masks with `Permissions` or the `maskOr`, `maskAnd` and
+`maskWithout` helpers instead of the operators. `AGENCY_KEY_GRANTABLE_PERMISSIONS` lists what an
+agency key may hold.
 
 An OAuth client with no credentials yet can self-register (RFC 7591 dynamic client
 registration). Registration mints only a `client_id` and grants nothing on its own — a human
@@ -424,7 +459,7 @@ const warmbly = new Warmbly({
   baseUrl: "https://api.warmbly.com/v1",
   appBaseUrl: "https://app.warmbly.com",
   gatewayUrl: "wss://realtime.warmbly.com",
-  organizationId: "org_123",    // default gateway org
+  organizationId: "org_123",    // default gateway org; Warmbly-Organization for agency keys
   timeout: 60_000,              // ms
   maxRetries: 2,
   fetch: customFetch,           // inject a fetch implementation
@@ -439,6 +474,7 @@ const warmbly = new Warmbly({
 | `baseUrl` | `https://api.warmbly.com/v1` | REST base URL |
 | `appBaseUrl` | `https://app.warmbly.com` | OAuth authorize host |
 | `gatewayUrl` | `wss://realtime.warmbly.com` | Gateway WebSocket base |
+| `organizationId` | none | Default gateway org, and the client workspace an agency key acts on (`Warmbly-Organization`) |
 | `timeout` | `60000` | Per-request timeout in ms |
 | `maxRetries` | `2` | Retries on transient failures |
 | `fetch` | platform global | Custom `fetch` |

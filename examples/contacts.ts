@@ -22,7 +22,8 @@ for await (const c of results) {
 }
 
 // 3. Look up a single contact by email.
-const found = await warmbly.contacts.lookup({ email: "jordan@warmbly.com" });
+const { contact: found } = await warmbly.contacts.lookup({ email: "jordan@warmbly.com" });
+if (!found) throw new Error("No contact with that email");
 console.log("looked up", found.id, found.first_name);
 
 // 4. Get that contact by id and update a field.

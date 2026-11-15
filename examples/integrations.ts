@@ -28,6 +28,7 @@ console.log("configured", configured.status);
 // Subscribe to an event so Warmbly notifies the provider when it happens.
 const event = await warmbly.integrations.createConnectionEvent(connection.id, {
   event_type: "contact.created",
+  action: "push",
 });
 console.log("subscribed event", event.id);
 
@@ -38,15 +39,15 @@ console.log("events", events.length);
 // Map Warmbly fields to the provider's fields so synced records line up.
 const mappings = await warmbly.integrations.setFieldMappings(connection.id, {
   mappings: [
-    { source: "email", target: "email" },
-    { source: "first_name", target: "firstname" },
-    { source: "company", target: "company" },
+    { warmbly_field: "email", external_field: "email" },
+    { warmbly_field: "first_name", external_field: "firstname" },
+    { warmbly_field: "company", external_field: "company" },
   ],
 });
 console.log("field mappings", mappings);
 
 // List recent sync runs to see what has flowed through the connection.
-const runs = await warmbly.integrations.listRuns(connection.id, { limit: 10 });
+const runs = await warmbly.integrations.listRuns(connection.id);
 console.log("runs", runs);
 
 // Test the connection end to end before relying on it.
@@ -60,8 +61,5 @@ const push = await warmbly.integrations.pushConnection(connection.id, {
 console.log("push result", push);
 
 // List meeting bookings synced in from connected schedulers.
-const bookings = await warmbly.integrations.bookings({
-  from: "2026-06-01",
-  to: "2026-06-15",
-});
+const bookings = await warmbly.integrations.bookings();
 console.log("bookings", bookings);
