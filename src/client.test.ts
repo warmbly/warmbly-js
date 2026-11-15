@@ -9,6 +9,7 @@ import { OAuthApplications } from "./oauth/applications";
 import { OAuthClient } from "./oauth/oauth";
 import {
   Advisor,
+  Agency,
   AgentTools,
   AISkills,
   Analytics,
@@ -23,7 +24,9 @@ import {
   Integrations,
   LeadSync,
   Meetings,
+  Migrations,
   Misc,
+  Reports,
   Segments,
   Suppressions,
   Templates,
@@ -179,6 +182,9 @@ describe("Warmbly construction", () => {
     expect(warmbly.webhooks).toBeInstanceOf(Webhooks);
     expect(warmbly.misc).toBeInstanceOf(Misc);
     expect(warmbly.oauthApplications).toBeInstanceOf(OAuthApplications);
+    expect(warmbly.migrations).toBeInstanceOf(Migrations);
+    expect(warmbly.reports).toBeInstanceOf(Reports);
+    expect(warmbly.agency).toBeInstanceOf(Agency);
   });
 
   it("exposes the OAuthClient as the static OAuth member", () => {
@@ -189,6 +195,30 @@ describe("Warmbly construction", () => {
       redirectUri: "https://app.warmbly.com/callback",
     });
     expect(oauth).toBeInstanceOf(OAuthClient);
+  });
+});
+
+describe("Warmbly.withOrganization", () => {
+  it("returns a new client for another workspace and leaves the original alone", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ ok: true }), {
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    const base = new Warmbly({
+      apiKey: "wmagency_test",
+      organizationId: "org_a",
+      fetch: fetchMock as unknown as FetchLike,
+    });
+    const other = base.withOrganization("org_b");
+    expect(other).not.toBe(base);
+    expect(other.options.organizationId).toBe("org_b");
+    expect(base.options.organizationId).toBe("org_a");
+    expect(await other.options.getToken()).toBe("wmagency_test");
+    await other.request("GET", "/campaigns");
+    const init = (fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1];
+    expect((init.headers as Record<string, string>)["Warmbly-Organization"]).toBe("org_b");
   });
 });
 

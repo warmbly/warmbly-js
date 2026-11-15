@@ -14,24 +14,63 @@ export type {
 } from "./advisor";
 
 export { Advisor } from "./advisor";
-
+export type {
+  AgencyAIBalance,
+  AgencyAIClient,
+  AgencyAITopUpInfo,
+  AgencyAITransferResult,
+  AgencyAttention,
+  AgencyAttentionKind,
+  AgencyBrand,
+  AgencyBrandSettings,
+  AgencyClient,
+  AgencyClientAccess,
+  AgencyClientAdvisor,
+  AgencyClientCampaigns,
+  AgencyClientInbox,
+  AgencyClientMailboxes,
+  AgencyClientUsage,
+  AgencyDetail,
+  AgencyGrant,
+  AgencyInboxMessage,
+  AgencyInboxThread,
+  AgencyInvitation,
+  AgencyList,
+  AgencyMailbox,
+  AgencyMember,
+  AgencyMemberList,
+  AgencyOverview,
+  AgencyOverviewClient,
+  AgencyOverviewTotals,
+  AgencyPlan,
+  AgencyPlanList,
+  AgencyPortalTheme,
+  AgencyRecord,
+  AgencyRole,
+  AgencySubscriptionStatus,
+  AgencyUsage,
+  CreateAgencyClientParams,
+  GetAgencyInboxMessageParams,
+  GetAgencyInboxThreadParams,
+  ListAgencyInboxParams,
+  ListAgencyMailboxesParams,
+  TransferAgencyAIParams,
+  UpdateAgencyClientParams,
+} from "./agency";
+export { Agency, AgencyClients, AgencyInbox, AgencyMigrations } from "./agency";
 export type {
   AgentTool,
   AgentToolResult,
   JsonSchema,
   OpenAIFunctionTool,
 } from "./agent-tools";
-
 export { AgentTools } from "./agent-tools";
-
 export type {
   AISkill,
   CreateAISkillParams,
   UpdateAISkillParams,
 } from "./ai-skills";
-
 export { AISkills } from "./ai-skills";
-
 export type {
   AccountStatusesParams,
   AnalyticsParams,
@@ -56,9 +95,7 @@ export type {
   WarmupPlacementRate,
   WarmupPlacementReport,
 } from "./analytics";
-
 export { Analytics } from "./analytics";
-
 export type {
   ApiKey,
   ApiKeyAnalytics,
@@ -77,9 +114,7 @@ export type {
   PermissionCatalogEntry,
   UpdateApiKeyParams,
 } from "./api-keys";
-
 export { ApiKeys } from "./api-keys";
-
 export type {
   Automation,
   AutomationCondition,
@@ -90,7 +125,6 @@ export type {
   AutomationParams,
   AutomationPosition,
 } from "./automations";
-
 export { Automations } from "./automations";
 export { APIResource } from "./base";
 export type {
@@ -148,8 +182,10 @@ export type {
   BatchResearchParams,
   BulkUpdateContactsParams,
   Contact,
+  ContactCampaignLead,
   ContactCampaignState,
   ContactCampaignStep,
+  ContactEngagement,
   ContactImport,
   ContactImportAnalysis,
   ContactImportColumnStats,
@@ -310,6 +346,8 @@ export type {
   FormSubmission,
   FormSubmissionList,
   FormsConfig,
+  FormsDomainCheckStatus,
+  FormsDomainDnsRecord,
   FormsDomainStatus,
   ListFormSubmissionsParams,
   UpdateFormParams,
@@ -443,6 +481,7 @@ export type {
   LeadSelection,
   LeadSeniority,
   LeadSite,
+  LeadSiteUnread,
   LeadSort,
   ListLeadSearchesParams,
   QueryLeadsParams,
@@ -458,6 +497,34 @@ export type {
   MeetingStatus,
 } from "./meetings";
 export { Meetings } from "./meetings";
+export type {
+  CreateToolMigrationParams,
+  ListToolMigrationsParams,
+  StartToolMigrationParams,
+  ToolMigration,
+  ToolMigrationAccount,
+  ToolMigrationCampaign,
+  ToolMigrationCampaignStatus,
+  ToolMigrationCampaignSummary,
+  ToolMigrationCounts,
+  ToolMigrationFollowup,
+  ToolMigrationInFlight,
+  ToolMigrationInventory,
+  ToolMigrationKind,
+  ToolMigrationMailbox,
+  ToolMigrationMailboxKind,
+  ToolMigrationOptions,
+  ToolMigrationProvider,
+  ToolMigrationProviderField,
+  ToolMigrationProviderId,
+  ToolMigrationSourceWorkspace,
+  ToolMigrationStatus,
+  ToolMigrationTarget,
+  ToolMigrationTargetChoice,
+  ToolMigrationTargetStatus,
+  ToolMigrationWorkspace,
+} from "./migrations";
+export { Migrations } from "./migrations";
 export type {
   AuditLogEntry,
   AuthConfig,
@@ -514,6 +581,30 @@ export type {
   PlacementUsage,
 } from "./placement";
 export { Placement } from "./placement";
+export type {
+  ClientReport,
+  ClientReportAccess,
+  ClientReportAccessScope,
+  ClientReportCadence,
+  ClientReportCampaign,
+  ClientReportDay,
+  ClientReportLink,
+  ClientReportLinkResult,
+  ClientReportMailboxes,
+  ClientReportOverview,
+  ClientReportRange,
+  ClientReportReply,
+  ClientReportSchedule,
+  ClientReportSections,
+  ClientReportView,
+  CreateClientReportLinkParams,
+  CreateClientReportParams,
+  ListClientReportsParams,
+  PreviewClientReportParams,
+  SetClientReportScheduleParams,
+  UpdateClientReportParams,
+} from "./reports";
+export { Reports } from "./reports";
 export type {
   CreateSegmentParams,
   PreviewSegmentParams,
